@@ -1,3 +1,5 @@
+"use script";
+
 const path = require("path");
 
 const gulp = require("gulp");
@@ -7,12 +9,14 @@ const umd = require("gulp-umd");
 const xo = require("gulp-xo");
 const KarmaServer = require("karma").Server;
 
+// Cleanup pending watch on user exit.
 process.on('SIGINT', function() {
   process.exit();
 });
 
 gulp.task("umd", function () {
   return gulp.src("src/idb-file-storage.js")
+    // Log errors on console and desktop notification.
     .pipe(plumber({
       errorHandler: function (err) {
         console.error("UMD Build Error", err);
@@ -20,7 +24,9 @@ gulp.task("umd", function () {
         notify.onError("UMD Build Error: <%= error.message %>")(err);
       }
     }))
+    // Run js linting on every build.
     .pipe(xo())
+    // Wrap as an UMD module.
     .pipe(umd({
       exports: function () {
         return "IDBFiles";
