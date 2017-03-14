@@ -46,7 +46,7 @@ module.exports = function (config) {
     // test results reporter to use
     // possible values: 'dots', 'progress'
     // available reporters: https://npmjs.org/browse/keyword/karma-reporter
-    reporters: ["progress", "coverage"],
+    reporters: ["progress", "coverage", "notify"],
 
     // web server port
     port: 9876,
@@ -83,6 +83,12 @@ module.exports = function (config) {
       instrumenterOptions: {
         istanbul: {noCompact: true}
       }
+    },
+
+    // Optional Notify Settings
+    notifyReporter: {
+      reportEachFailure: true,
+      reportSuccess: true,
     }
   });
 };

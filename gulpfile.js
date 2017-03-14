@@ -1,10 +1,15 @@
 const path = require("path");
 
 const gulp = require("gulp");
+const notify = require("gulp-notify");
 const plumber = require("gulp-plumber");
 const umd = require("gulp-umd");
 const xo = require("gulp-xo");
 const KarmaServer = require("karma").Server;
+
+process.on('SIGINT', function() {
+  process.exit();
+});
 
 gulp.task("umd", function () {
   return gulp.src("src/idb-file-storage.js")
@@ -12,6 +17,7 @@ gulp.task("umd", function () {
       errorHandler: function (err) {
         console.error("UMD Build Error", err);
         this.emit('end');
+        notify.onError("UMD Build Error: <%= error.message %>")(err);
       }
     }))
     .pipe(xo())
