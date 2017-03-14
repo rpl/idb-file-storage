@@ -1,7 +1,7 @@
 // Karma configuration
 // Generated on Mon Mar 13 2017 23:04:28 GMT+0100 (CET)
 
-const SOURCES = ['src/index.js'];
+const SOURCES = ['dist/idb-file-storage.js'];
 const TESTS = ['test/unit/common.js', 'test/unit/**/test.*.js'];
 const COVERAGE_DIR = 'coverage/';
 
@@ -78,7 +78,8 @@ module.exports = function(config) {
 
     // Continuous Integration mode
     // if true, Karma captures browsers, runs the tests and exits
-    singleRun: false,
+    // NOTE: configured in the gulpfile.
+    // singleRun: false,
 
     // Concurrency level
     // how many browser should be started simultaneous

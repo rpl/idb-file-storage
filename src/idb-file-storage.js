@@ -280,6 +280,10 @@ class IDBPromisedFileHandle {
 }
 
 const IDBFiles = {
+  waitForDOMRequest,
+  IDBFileStorage,
+  IDBPromisedMutableFile,
+  IDBPromisedFileHandle,
   async getFileStorage({name} = {}) {
     const filesStorage = new IDBFileStorage({name: name || "default"});
     await filesStorage.initializedDB();

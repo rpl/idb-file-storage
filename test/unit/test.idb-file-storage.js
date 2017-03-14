@@ -6,7 +6,7 @@ describe("IDBFiles", () => {
 
   it('should provide a getFileStorage', async () => {
     const tmpFiles = await IDBFiles.getFileStorage({name: "tmpFiles"});
-    expect(tmpFiles).to.be.instanceOf(IDBFileStorage);
+    expect(tmpFiles).to.be.instanceOf(IDBFiles.IDBFileStorage);
   });
 
   describe("IDBFileStorage", () => {
@@ -56,7 +56,7 @@ describe("IDBFiles", () => {
 
       expect(
         await tmpFiles.createMutableFile("test-mutable-file-exception.txt")
-      ).to.be.instanceOf(IDBPromisedMutableFile);
+      ).to.be.instanceOf(IDBFiles.IDBPromisedMutableFile);
     });
   });
 });

@@ -2,10 +2,12 @@
   "name": "idb-file-storage",
   "version": "0.1.0",
   "description": "Simple Promise-based IndexedDB wrapper to store files",
-  "main": "index.js",
+  "main": "dist/idb-file-storage.js",
   "scripts": {
-    "test": "karma start --single-run",
-    "test:watch": "karma start"
+    "build": "gulp",
+    "build:watch": "gulp default:watch",
+    "test": "gulp test",
+    "test:watch": "gulp test:watch"
   },
   "keywords": [
     "IndexedDB",
@@ -19,6 +21,8 @@
   "devDependencies": {
     "babel-plugin-istanbul": "^4.0.0",
     "chai": "^3.5.0",
+    "gulp": "^3.9.1",
+    "gulp-umd": "^0.2.0",
     "karma": "^1.5.0",
     "karma-babel-preprocessor": "^6.0.1",
     "karma-chai": "^0.1.0",

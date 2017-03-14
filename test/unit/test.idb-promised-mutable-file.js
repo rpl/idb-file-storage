@@ -12,7 +12,7 @@ describe("IDBFiles", () => {
 
       expect(
         await tmpFiles.createMutableFile("test-mutable-file-exception.txt")
-      ).to.be.instanceOf(IDBPromisedMutableFile);
+      ).to.be.instanceOf(IDBFiles.IDBPromisedMutableFile);
     });
   });
 });
