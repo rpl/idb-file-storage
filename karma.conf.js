@@ -88,7 +88,7 @@ module.exports = function (config) {
     // Optional Notify Settings
     notifyReporter: {
       reportEachFailure: true,
-      reportSuccess: true,
+      reportSuccess: true
     }
   });
 };

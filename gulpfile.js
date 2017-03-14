@@ -10,7 +10,7 @@ const xo = require("gulp-xo");
 const KarmaServer = require("karma").Server;
 
 // Cleanup pending watch on user exit.
-process.on('SIGINT', function() {
+process.on("SIGINT", function () {
   process.exit();
 });
 
@@ -20,7 +20,7 @@ gulp.task("umd", function () {
     .pipe(plumber({
       errorHandler: function (err) {
         console.error("UMD Build Error", err);
-        this.emit('end');
+        this.emit("end");
         notify.onError("UMD Build Error: <%= error.message %>")(err);
       }
     }))

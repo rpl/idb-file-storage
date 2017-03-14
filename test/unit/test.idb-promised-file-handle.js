@@ -37,7 +37,7 @@ describe("IDBFiles", () => {
       const metadata = await fhRo.getMetadata();
       expect(Object.getOwnPropertyNames(metadata).sort()).to.be.eql(["lastModified", "size"]);
       expect(metadata.size).to.be.eql(0);
-      expect(metadata.lastModified).to.be.defined;
+      expect(metadata.lastModified).to.be.defined; // eslint-disable-line no-unused-expressions
     });
 
     it("provides a readAsText method", async () => {
@@ -66,7 +66,7 @@ describe("IDBFiles", () => {
       const fileContent = [
         "content line1\n",
         "content line2\n",
-        "content line3\n",
+        "content line3\n"
       ];
       const fileSize = fileContent.join().length;
 
@@ -75,7 +75,7 @@ describe("IDBFiles", () => {
       }
 
       const fileText = await fhRw.readAsText(fileSize);
-      expect(fileText).to.be.eql(fileContent.join(''));
+      expect(fileText).to.be.eql(fileContent.join(""));
     });
 
     it("provides a write method", async () => {
@@ -86,7 +86,7 @@ describe("IDBFiles", () => {
       const fileContent = [
         "content line1\n",
         "content line2\n",
-        "content line3\n",
+        "content line3\n"
       ];
       const fileSize = fileContent.join().length;
 
@@ -98,7 +98,7 @@ describe("IDBFiles", () => {
       }
 
       const fileText = await fhRw.readAsText(fileSize);
-      expect(fileText).to.be.eql(fileContent.join(''));
+      expect(fileText).to.be.eql(fileContent.join(""));
     });
 
     it("provides a truncate method", async () => {
@@ -147,7 +147,6 @@ describe("IDBFiles", () => {
       const fhRo = await mutableFile.open("readonly");
       let metadata = await fhRo.getMetadata();
       expect(metadata.size).to.be.eql(fileSize);
-
     });
 
     it("provides an abort method", async () => {
@@ -177,11 +176,10 @@ describe("IDBFiles", () => {
       const fileContent = [
         "content line1\n",
         "content line2\n",
-        "content line3\n",
+        "content line3\n"
       ];
       const fileSize = fileContent.join().length;
 
-      let expectedLocation = 0;
       for (const line of fileContent) {
         fhRw.queuedWrite(line);
       }
@@ -189,10 +187,10 @@ describe("IDBFiles", () => {
       await fhRw.waitForQueuedWrites();
 
       const fileText = await fhRw.readAsText(fileSize);
-      expect(fileText).to.be.eql(fileContent.join(''));
+      expect(fileText).to.be.eql(fileContent.join(""));
     });
 
-    it('can persist the changes on the file content', async () => {
+    it("can persist the changes on the file content", async () => {
       const tmpFiles = await IDBFiles.getFileStorage({name: "tmpFiles"});
       const mutableFile = await tmpFiles.createMutableFile("test-mutable-file.txt");
 
@@ -200,7 +198,7 @@ describe("IDBFiles", () => {
       const fileContent = [
         "content line1\n",
         "content line2\n",
-        "content line3\n",
+        "content line3\n"
       ];
       const fileSize = fileContent.join().length;
 
@@ -222,7 +220,7 @@ describe("IDBFiles", () => {
       await fhRw2.close();
 
       fileText = await fhRo.readAsText(fileSize);
-      expect(fileText).to.be.eql(fileContent.join(''));
+      expect(fileText).to.be.eql(fileContent.join(""));
     });
   });
 });

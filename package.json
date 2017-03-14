@@ -6,7 +6,7 @@
   "scripts": {
     "build": "gulp",
     "build:watch": "gulp default:watch",
-    "test": "gulp test",
+    "test": "xo && gulp test",
     "test:watch": "gulp test:watch"
   },
   "keywords": [
