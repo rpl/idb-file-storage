@@ -36,6 +36,23 @@ describe("IDBFiles", () => {
       expect(results.length).to.be.eq(1);
       expect(results[0]).to.be.eq("path2/filename2");
     });
+
+    it("can remove stored files", async () => {
+      const tmpFiles = await IDBFiles.getFileStorage({name: "tmpFiles"});
+
+      const file = new File(["test content"], "path2/filename2");
+      await tmpFiles.put(file);
+
+      const results = await tmpFiles.list();
+
+      expect(results.length).to.be.eq(1);
+      expect(results[0]).to.be.eq("path2/filename2");
+
+      await tmpFiles.remove("path2/filename2");
+
+      const updatedResults = await tmpFiles.list();
+      expect(updatedResults.length).to.be.eq(0);
+    });
   });
 
   describe("IDBFileStorage.createMutableFile without IDBMutableFile", () => {
@@ -57,7 +74,7 @@ describe("IDBFiles", () => {
       const tmpFiles = await IDBFiles.getFileStorage({name: "tmpFiles"});
 
       expect(
-        await tmpFiles.createMutableFile("test-mutable-file-exception.txt")
+        await tmpFiles.createMutableFile("test-mutable-file.txt")
       ).to.be.instanceOf(IDBFiles.IDBPromisedMutableFile);
     });
   });

@@ -67,7 +67,9 @@ class IDBPromisedFileHandle {
 
   async abort() {
     if (this.lockedFile.active) {
-      await waitForDOMRequest(this.lockedFile.abort());
+      // NOTE: in the docs abort is reported to return a DOMRequest, but it doesn't seem
+      // to be the case. (https://developer.mozilla.org/en-US/docs/Web/API/LockedFile/abort)
+      this.lockedFile.abort();
     }
 
     this.aborted = true;
@@ -96,9 +98,9 @@ class IDBPromisedFileHandle {
     return await waitForDOMRequest(this.lockedFile.readAsArrayBuffer(size));
   }
 
-  async trucate() {
+  async truncate(location = 0) {
     this.ensureLocked({invalidMode: "readonly"});
-    return await waitForDOMRequest(this.lockedFile.truncate());
+    return await waitForDOMRequest(this.lockedFile.truncate(location));
   }
 
   async append(data) {
