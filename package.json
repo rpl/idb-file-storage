@@ -6,7 +6,7 @@
   "scripts": {
     "build": "gulp",
     "build:watch": "gulp default:watch",
-    "test": "xo && gulp test",
+    "test": "xo --reporter codeframe && npm run build && karma start --single-run",
     "test:watch": "gulp test:watch"
   },
   "keywords": [
