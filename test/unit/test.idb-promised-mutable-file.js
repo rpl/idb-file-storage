@@ -1,3 +1,5 @@
+"use strict";
+
 describe("IDBFiles", () => {
   beforeEach(async () => {
     const tmpFiles = await IDBFiles.getFileStorage({name: "tmpFiles"});
@@ -7,7 +9,7 @@ describe("IDBFiles", () => {
   describe("IDBPromisedMutableFile", () => {
     before(skipOnUnsupportedIDBMutableFile);
 
-    it('should create a IDBPromisedMutableFile instance', async () => {
+    it("should create a IDBPromisedMutableFile instance", async () => {
       const tmpFiles = await IDBFiles.getFileStorage({name: "tmpFiles"});
 
       expect(

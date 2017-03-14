@@ -1,37 +1,33 @@
 // Karma configuration
 // Generated on Mon Mar 13 2017 23:04:28 GMT+0100 (CET)
 
-const SOURCES = ['dist/idb-file-storage.js'];
-const TESTS = ['test/unit/common.js', 'test/unit/**/test.*.js'];
-const COVERAGE_DIR = 'coverage/';
+const SOURCES = ["dist/idb-file-storage.js"];
+const TESTS = ["test/unit/common.js", "test/unit/**/test.*.js"];
+const COVERAGE_DIR = "coverage/";
 
 const preprocessors = {};
-SOURCES.forEach(function (source) {
-  preprocessors[SOURCES] = ['babel'];
+SOURCES.forEach(function (src) {
+  preprocessors[src] = ["babel"];
 });
 
-module.exports = function(config) {
+module.exports = function (config) {
   config.set({
 
     // base path that will be used to resolve all patterns (eg. files, exclude)
-    basePath: '',
-
+    basePath: "",
 
     // frameworks to use
     // available frameworks: https://npmjs.org/browse/keyword/karma-adapter
-    frameworks: ['mocha', 'chai', 'chai-as-promised', 'sinon'],
-
+    frameworks: ["mocha", "chai", "chai-as-promised", "sinon"],
 
     // list of files / patterns to load in the browser
     files: [].concat(SOURCES, TESTS),
 
-
     // list of files to exclude
     exclude: [
-      '~*',
-      '#*'
+      "~*",
+      "#*"
     ],
-
 
     // preprocess matching files before serving them to the browser
     // available preprocessors: https://npmjs.org/browse/keyword/karma-preprocessor
@@ -42,39 +38,32 @@ module.exports = function(config) {
         // Do not transpile ES6 sources, babel is only used to hook up the
         // coverage instrumentation using babel-plugin-istanbul.
         //   presets: ['es2015'],
-        sourceMap: 'inline',
-        plugins: ['babel-plugin-istanbul'],
-      },
+        sourceMap: "inline",
+        plugins: ["babel-plugin-istanbul"]
+      }
     },
-
 
     // test results reporter to use
     // possible values: 'dots', 'progress'
     // available reporters: https://npmjs.org/browse/keyword/karma-reporter
-    reporters: ['progress', 'coverage'],
-
+    reporters: ["progress", "coverage"],
 
     // web server port
     port: 9876,
 
-
     // enable / disable colors in the output (reporters and logs)
     colors: true,
-
 
     // level of logging
     // possible values: config.LOG_DISABLE || config.LOG_ERROR || config.LOG_WARN || config.LOG_INFO || config.LOG_DEBUG
     logLevel: config.LOG_INFO,
 
-
     // enable / disable watching file and executing tests whenever any file changes
     autoWatch: true,
 
-
     // start these browsers
     // available browser launchers: https://npmjs.org/browse/keyword/karma-launcher
-    browsers: ['Firefox', 'Chrome'],
-
+    browsers: ["Firefox", "Chrome"],
 
     // Continuous Integration mode
     // if true, Karma captures browsers, runs the tests and exits
@@ -88,12 +77,12 @@ module.exports = function(config) {
     // Coverage reports
     coverageReporter: {
       reporters: [
-        { type: 'html', dir: COVERAGE_DIR },
-        { type: 'text' },
+        {type: "html", dir: COVERAGE_DIR},
+        {type: "text"}
       ],
       instrumenterOptions: {
-        istanbul: { noCompact: true },
-      },
-    },
-  })
-}
+        istanbul: {noCompact: true}
+      }
+    }
+  });
+};
