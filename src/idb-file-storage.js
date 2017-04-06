@@ -172,11 +172,48 @@ class IDBPromisedMutableFile {
   persist() {
     return this.filesStorage.put(this);
   }
+
+  async runFileRequestGenerator(generatorFunction, mode) {
+    if (generatorFunction.constructor.name !== "GeneratorFunction") {
+      throw new Error("runGenerator parameter should be a generator function");
+    }
+
+    await new Promise((resolve, reject) => {
+      const lockedFile = this.mutableFile.open(mode || "readwrite");
+      const fileRequestsIter = generatorFunction(lockedFile);
+
+      const processFileRequestIter = prevRequestResult => {
+        let nextFileRequest = fileRequestsIter.next(prevRequestResult);
+        if (nextFileRequest.done) {
+          resolve();
+          return;
+        } else if (!(nextFileRequest.value instanceof window.DOMRequest)) {
+          const error = new Error("FileRequestGenerator should only yield DOMRequest instances");
+          fileRequestsIter.throw(error);
+          reject(error);
+          return;
+        }
+
+        const request = nextFileRequest.value;
+        if (request.onsuccess || request.onerror) {
+          const error = new Error("DOMRequest onsuccess/onerror callbacks are already set");
+          fileRequestsIter.throw(error);
+          reject(error);
+        } else {
+          request.onsuccess = () => processFileRequestIter(request.result);
+          request.onerror = () => reject(request.error);
+        }
+      };
+
+      processFileRequestIter();
+    });
+  }
 }
 
 class IDBFileStorage {
-  constructor({name} = {}) {
+  constructor({name, persistent} = {}) {
     this.name = name;
+    this.persistent = persistent;
     this.indexedDBName = `IDBFilesStorage-DB-${this.name}`;
     this.objectStorageName = "IDBFilesObjectStorage";
 
@@ -190,6 +227,9 @@ class IDBFileStorage {
     }
 
     this.initializedPromise = (async () => {
+      if (window.IDBMutableFile && this.persistent) {
+        this.version = {version: this.version, storage: "persistent"};
+      }
       const dbReq = indexedDB.open(this.indexedDBName, this.version);
 
       dbReq.onupgradeneeded = () => {
