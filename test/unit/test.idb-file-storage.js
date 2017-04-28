@@ -17,7 +17,7 @@ describe("IDBFiles", () => {
 
       const blob = new Blob(["test content"], {type: "text/plain"});
 
-      await tmpFiles.put(blob, "path/to/filename1");
+      await tmpFiles.put("path/to/filename1", blob);
 
       const results = await tmpFiles.list();
 
@@ -28,8 +28,8 @@ describe("IDBFiles", () => {
     it("can store and list File instances", async () => {
       const tmpFiles = await IDBFiles.getFileStorage({name: "tmpFiles"});
 
-      const file = new File(["test content"], "path2/filename2");
-      await tmpFiles.put(file);
+      const file = new File(["test content"], "filename2");
+      await tmpFiles.put("path2/filename2", file);
 
       const results = await tmpFiles.list();
 
@@ -40,8 +40,8 @@ describe("IDBFiles", () => {
     it("can remove stored files", async () => {
       const tmpFiles = await IDBFiles.getFileStorage({name: "tmpFiles"});
 
-      const file = new File(["test content"], "path2/filename2");
-      await tmpFiles.put(file);
+      const file = new File(["test content"], "filename2");
+      await tmpFiles.put("path2/filename2", file);
 
       const results = await tmpFiles.list();
 
