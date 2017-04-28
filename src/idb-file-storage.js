@@ -293,10 +293,49 @@ class IDBFileStorage {
     return waitForDOMRequest(objectStore.delete(fileName));
   }
 
-  async list() {
+  async list(options) {
     const idb = await this.initializedDB();
     const objectStore = this.getObjectStoreTransaction({idb});
-    return waitForDOMRequest(objectStore.getAllKeys());
+    const allKeys = await waitForDOMRequest(objectStore.getAllKeys());
+
+    let filteredKeys = allKeys;
+
+    if (options) {
+      filteredKeys = filteredKeys.filter(key => {
+        let match = true;
+
+        if (typeof options.startsWith === "string") {
+          match = match && key.startsWith(options.startsWith);
+        }
+
+        if (typeof options.endsWith === "string") {
+          match = match && key.endsWith(options.endsWith);
+        }
+
+        if (typeof options.includes === "string") {
+          match = match && key.includes(options.includes);
+        }
+
+        if (typeof options.filterFn === "function") {
+          match = match && options.filterFn(key);
+        }
+
+        return match;
+      });
+    }
+
+    return filteredKeys;
+  }
+
+  async count(options) {
+    if (!options) {
+      const idb = await this.initializedDB();
+      const objectStore = this.getObjectStoreTransaction({idb});
+      return waitForDOMRequest(objectStore.count());
+    }
+
+    const filteredKeys = await this.list(options);
+    return filteredKeys.length;
   }
 
   async get(fileName) {
