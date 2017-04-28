@@ -170,7 +170,7 @@ class IDBPromisedMutableFile {
   }
 
   persist() {
-    return this.filesStorage.put(this);
+    return this.filesStorage.put(this.fileName, this);
   }
 
   async runFileRequestGenerator(generatorFunction, mode) {
@@ -256,14 +256,18 @@ class IDBFileStorage {
     }
     const idb = await this.initializedDB();
     const mutableFile = await waitForDOMRequest(
-      idb.createMutableFile(this.fileName, this.fileType)
+      idb.createMutableFile(fileName, fileType)
     );
     return new IDBPromisedMutableFile({
       filesStorage: this, idb, fileName, fileType, mutableFile
     });
   }
 
-  async put(file, fileName) {
+  async put(fileName, file) {
+    if (!fileName || typeof fileName !== "string") {
+      throw new Error("fileName parameter is mandatory");
+    }
+
     if (!(file instanceof File) && !(file instanceof Blob) &&
         !(window.IDBMutableFile && file instanceof window.IDBMutableFile) &&
         !(file instanceof IDBPromisedMutableFile)) {
@@ -271,12 +275,7 @@ class IDBFileStorage {
     }
 
     if (file instanceof IDBPromisedMutableFile) {
-      fileName = fileName || file.fileName;
       file = file.mutableFile;
-    }
-
-    if (file instanceof File) {
-      fileName = fileName || file.name;
     }
 
     const idb = await this.initializedDB();
@@ -285,6 +284,10 @@ class IDBFileStorage {
   }
 
   async remove(fileName) {
+    if (!fileName) {
+      throw new Error("fileName parameter is mandatory");
+    }
+
     const idb = await this.initializedDB();
     const objectStore = this.getObjectStoreTransaction({idb, mode: "readwrite"});
     return waitForDOMRequest(objectStore.delete(fileName));
