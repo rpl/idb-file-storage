@@ -19,12 +19,15 @@
   "author": "Luca Greco <lgreco@mozilla.com>",
   "license": "MPL-2.0",
   "devDependencies": {
+    "babel": "^6.23.0",
     "babel-plugin-istanbul": "^4.0.0",
+    "babel-plugin-transform-es2015-modules-umd": "^6.24.1",
+    "babel-preset-babili": "0.0.12",
     "chai": "^3.5.0",
     "gulp": "^3.9.1",
+    "gulp-babel": "^6.1.2",
     "gulp-notify": "^3.0.0",
     "gulp-plumber": "^1.1.0",
-    "gulp-umd": "^0.2.0",
     "gulp-xo": "^0.14.0",
     "karma": "^1.5.0",
     "karma-babel-preprocessor": "^6.0.1",
@@ -51,7 +54,8 @@
       ]
     },
     "ignored": [
-      "dist/**"
+      "dist/**",
+      "docs/**"
     ],
     "overrides": [
       {
@@ -69,7 +73,13 @@
           "skipOnUnsupportedIDBMutableFile"
         ],
         "rules": {
-          "generator-star-spacing": ["error", {"before": false, "after": true}]
+          "generator-star-spacing": [
+            "error",
+            {
+              "before": false,
+              "after": true
+            }
+          ]
         }
       }
     ]

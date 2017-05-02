@@ -1,6 +1,6 @@
 "use strict";
 
-function waitForDOMRequest(req, onsuccess) {
+export function waitForDOMRequest(req, onsuccess) {
   return new Promise((resolve, reject) => {
     req.onsuccess = onsuccess ?
       (() => resolve(onsuccess(req.result))) : (() => resolve(req.result));
@@ -8,7 +8,7 @@ function waitForDOMRequest(req, onsuccess) {
   });
 }
 
-class IDBPromisedFileHandle {
+export class IDBPromisedFileHandle {
   constructor({file, lockedFile}) {
     this.file = file;
     this.lockedFile = lockedFile;
@@ -141,7 +141,7 @@ class IDBPromisedFileHandle {
   }
 }
 
-class IDBPromisedMutableFile {
+export class IDBPromisedMutableFile {
   constructor({filesStorage, idb, fileName, fileType, mutableFile}) {
     this.filesStorage = filesStorage;
     this.idb = idb;
@@ -210,7 +210,7 @@ class IDBPromisedMutableFile {
   }
 }
 
-class IDBFileStorage {
+export class IDBFileStorage {
   constructor({name, persistent} = {}) {
     this.name = name;
     this.persistent = persistent;
@@ -363,14 +363,8 @@ class IDBFileStorage {
   }
 }
 
-const IDBFiles = { // eslint-disable-line no-unused-vars
-  waitForDOMRequest,
-  IDBFileStorage,
-  IDBPromisedMutableFile,
-  IDBPromisedFileHandle,
-  async getFileStorage({name} = {}) {
-    const filesStorage = new IDBFileStorage({name: name || "default"});
-    await filesStorage.initializedDB();
-    return filesStorage;
-  }
-};
+export async function getFileStorage({name} = {}) {
+  const filesStorage = new IDBFileStorage({name: name || "default"});
+  await filesStorage.initializedDB();
+  return filesStorage;
+}
