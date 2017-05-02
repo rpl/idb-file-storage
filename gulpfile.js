@@ -3,9 +3,9 @@
 const path = require("path");
 
 const gulp = require("gulp");
+const babel = require("gulp-babel");
 const notify = require("gulp-notify");
 const plumber = require("gulp-plumber");
-const umd = require("gulp-umd");
 const xo = require("gulp-xo");
 const KarmaServer = require("karma").Server;
 
@@ -27,13 +27,19 @@ gulp.task("umd", function () {
     // Run js linting on every build.
     .pipe(xo())
     // Wrap as an UMD module.
-    .pipe(umd({
-      exports: function () {
-        return "IDBFiles";
-      },
-      namespace: function () {
-        return "IDBFiles";
-      }
+    .pipe(babel({
+      babelrc: false,
+      comments: true,
+      plugins: [
+        ["transform-es2015-modules-umd", {
+          globals: {
+            "idb-file-storage": "IDBFiles"
+          },
+          exactGlobals: true
+        }]
+      ],
+      sourceMap: true,
+      moduleId: "idb-file-storage"
     }))
     .pipe(gulp.dest("dist/"));
 });
