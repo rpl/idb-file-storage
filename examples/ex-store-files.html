@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html id="example-page">
+  <head>
+    <meta charset="utf-8">
+    <script src="../dist/idb-file-storage.js"></script>
+    <link rel="stylesheet" href="examples.css">
+  </head>
+  <body>
+    <h3 id="example-header">Store File objects</h3>
+
+    <div class="example-ui">
+      <label>Filename</label>
+      <input id="store-file-filename" placeholder="fakepath/fakefilename.ext">
+      <div id="store-file-dropzone"><span>Drop a file here</span></div>
+      <label>Size of the file</label>
+      <label id="store-file-drop-size">Drag a file to see here a preview of its size</label>
+      <button id="store-file">Save the dropped File</button>
+    </div>
+    <pre><code>
+// Same as for storing the Blob objects...
+
+async function storeFile(filename, file) {
+  try {
+    const tmpFiles = await IDBFiles.getFileStorage({
+      name: "tmpFiles"
+    });
+    await tmpFiles.put(filename, file);
+  } catch (err) {
+    console.error("File storing error", err);
+    throw err;
+  }
+
+  ...
+}
+    </code></pre>
+
+    <script src="ex-store-files.js"></script>
+  </body>
+</html>

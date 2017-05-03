@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html id="example-page">
+  <head>
+    <meta charset="utf-8">
+    <script src="../dist/idb-file-storage.js"></script>
+    <link rel="stylesheet" href="examples.css">
+  </head>
+  <body>
+    <h3 id="example-header">Get stored data</h3>
+
+    <div class="example-ui">
+      <label>Filename</label>
+      <input id="stored-filename" placeholder="fakepath/fakefilename.ext">
+      <button id="get-stored">Get stored data</button>
+      <label>Image Preview</label>
+      <button id="clear-preview">Clear Image Preview</button>
+      <img id="image-preview" src="">
+    </div>
+    <pre><code>
+async function getStoredData(filename) {
+  try {
+    const tmpFiles = await IDBFiles.getFileStorage({
+      name: "tmpFiles"
+    });
+    // filtered count...
+    const storedData = await tmpFiles.get(filename);
+
+    if (!storedData) {
+      // No data stored with the specified filename.
+    } else if (storedData instanceof Blob) {
+      // Found a Blob stored with the specified filename.
+    } else if (storedData instanceof File) {
+      // Found a Blob stored with the specified filename.
+    } else if (storedData instanceof IDBFiles.IDBPromisedMutableFile) {
+      // Found a Mutable File stored with the specified filename.
+    }
+  } catch (err) {
+    console.error("Get stored data", err);
+    throw err;
+  }
+
+  ...
+}
+    </code></pre>
+
+    <script src="ex-get-stored.js"></script>
+  </body>
+</html>

@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html id="example-page">
+  <head>
+    <meta charset="utf-8">
+    <script src="../dist/idb-file-storage.js"></script>
+    <link rel="stylesheet" href="examples.css">
+  </head>
+  <body>
+    <h3 id="example-header">Mutable Files (non-standard / Firefox only)</h3>
+
+    <div class="example-ui">
+      <label>Filename</label>
+      <input id="store-mutablefile-filename" placeholder="fakepath/fakefilename.ext">
+      <hr>
+      <label>File content</label>
+      <textarea id="store-mutablefile-text"></textarea>
+      <center><h2>or</h2></center>
+      <div id="store-file-dropzone"><span>Drop a file here</span></div>
+      <label>Size</label>
+      <input id="store-mutable-size" type="number" readonly placeholder="file size">
+      <button id="store-mutable-file">Save MutableFile</button>
+      <hr>
+      <center><h2>and then</h2></center>
+      <label>Append some data:</label>
+      <textarea id="store-mutablefile-append-text"></textarea>
+      <button id="append-text">Append data</button>
+    </div>
+    <pre><code>
+  // Create a new mutable file.
+  const tmpFiles = await IDBFiles.getFileStorage({
+    name: "tmpFiles"
+  });
+  const newMutableFile = await tmpFiles.createMutableFile(filename, "text");
+
+  // Open it in readwrite mode.
+  const newFileHandle = newMutableFile.open("readwrite");
+
+  // Write some data in it.
+  await newFileHandle.append(fileContentText);
+  await newFileHandle.close();
+
+  // Persist the mutable file into the IndexedDB storage.
+  await tmpFiles.put(filename, newMutableFile);
+
+  // NOTE: once persisted, it can be retrieved and modified without any need
+  // to persist it again.
+  const storedMutableFile = await tmpFiles.get(filename);
+
+  // Open it in readwrite mode.
+  const storedFileHandle = newMutableFile.open("readwrite");
+  await storedFileHandle.append(moreContextText);
+  await storedFileHandle.close();
+
+  // NOTE: to convert the mutable file into a blob url, the mutable file have
+  // to be persisted as a regular File instance (basically a snapshot of the
+  // current content of the mutable file stored in a different IndexedDB key).
+
+  const fileSnapshot = await mutableFile.persistAsFileSnapshot(`${filename}/last_snapshot`);
+  const fileBlobURL = URL.createObjectURL(fileSnapshot);
+    </code></pre>
+
+    <script src="ex-mutable-files.js"></script>
+
+  </body>
+</html>

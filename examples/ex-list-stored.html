@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html id="example-page">
+  <head>
+    <meta charset="utf-8">
+    <script src="../dist/idb-file-storage.js"></script>
+    <link rel="stylesheet" href="examples.css">
+  </head>
+  <body>
+    <h3 id="example-header">List and count stored data</h3>
+
+    <div class="example-ui">
+      <label>startsWith</label>
+      <input id="filter-startsWith" placeholder="fakepath/">
+
+      <label>endsWith</label>
+      <input id="filter-endsWith" placeholder=".txt">
+
+      <label>contains</label>
+      <input id="filter-contains" placeholder="node_modules/">
+
+      <button id="list-stored">List stored Files</button>
+    </div>
+    <pre><code>
+async function listStoredFiles(startsWith, endsWith,
+                               contains, customFn) {
+  try {
+    const tmpFiles = await IDBFiles.getFileStorage({
+      name: "tmpFiles"
+    });
+    // filtered count...
+    const count = await tmpFiles.count({
+      startsWith, endsWith, contains, customFn,
+    });
+
+    console.log("Number of stored files", count);
+
+    // as well as filtered list
+    const fileList = await tmpFiles.list({
+      startsWith, endsWith, contains, customFn,
+    });
+
+    console.log("Stored files", fileList);
+  } catch (err) {
+    console.error("List stored files error", err);
+    throw err;
+  }
+
+  ...
+}
+    </code></pre>
+
+    <script src="ex-list-stored.js"></script>
+  </body>
+</html>
