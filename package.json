@@ -20,7 +20,6 @@
   "author": "Luca Greco <lgreco@mozilla.com>",
   "license": "MPL-2.0",
   "devDependencies": {
-    "babel-cli": "6.24.1",
     "babel-plugin-istanbul": "4.1.3",
     "babel-plugin-transform-es2015-modules-umd": "6.24.1",
     "babel-preset-babili": "0.0.12",
