@@ -3,6 +3,10 @@
   "version": "0.1.0",
   "description": "Simple Promise-based IndexedDB wrapper to store files",
   "main": "dist/idb-file-storage.js",
+  "files": [
+    "dist",
+    "src"
+  ],
   "scripts": {
     "build": "gulp",
     "build:watch": "gulp default:watch",
