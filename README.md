@@ -1,6 +1,9 @@
 IDB File Storage
 ================
 
+[![Build Status](https://travis-ci.org/rpl/atom-webextensions.svg?branch=master)](https://travis-ci.org/rpl/atom-webextensions)
+[![esdoc Coverage](https://doc.esdoc.org/github.com/rpl/idb-file-storage/badge.svg)](https://doc.esdoc.org/github.com/rpl/idb-file-storage)
+
 **Status: Prototype/Proposal.**
 
 This library wraps some of the IndexedDB features related to store files into a Promised API.
