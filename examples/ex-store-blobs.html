@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html id="example-page">
+  <head>
+    <meta charset="utf-8">
+    <script src="../dist/idb-file-storage.js"></script>
+    <link rel="stylesheet" href="examples.css">
+  </head>
+  <body>
+    <h3 id="example-header">Store Blob objects</h3>
+
+    <div class="example-ui">
+      <label>Filename</label>
+      <input id="store-blob-filename" placeholder="fakepath/fakefilename.ext">
+      <label>Size</label>
+      <input id="store-blob-size" type="number" value="1024">
+      <button id="store-blob">Save Blob</button>
+    </div>
+    <pre><code>
+async function storeBlob() {
+  const blobSize = 1024 * 1024;
+  const blobData = new ArrayBuffer(blobSize);
+  const blob = new Blob([blobData]);
+
+  try {
+    const tmpFiles = await IDBFiles.getFileStorage({
+      name: "tmpFiles"
+    });
+    await tmpFiles.put("bigblob.dat", blob);
+  } catch (err) {
+    console.error("Blob storing error", err);
+    throw err;
+  }
+
+  ...
+}
+    </code></pre>
+
+    <script src="ex-store-blobs.js"></script>
+  </body>
+</html>

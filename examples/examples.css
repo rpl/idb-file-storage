@@ -1,0 +1,107 @@
+html#examples-index-page, #examples-index-page body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+}
+
+#examples-index-page body {
+  display: grid;
+  grid-template-columns: 20% 45% 35%;
+  grid-template-rows: auto;
+  grid-template-areas: "left-sidebar main right-sidebar";
+  justify-items: stretch;
+}
+
+#examples-list {
+  padding: 1em;
+  grid-area: left-sidebar;
+  background-color: lightskyblue;
+  border-right: 1px dashed black;
+  display: flex;
+  flex-direction: column;
+}
+
+#examples-list ul {
+  padding-left: 1em;
+}
+
+#example-content {
+  padding: 1em;
+  grid-area: main;
+  display: flex;
+  flex-direction: column;
+}
+
+#example-iframe {
+  background-color: transparent;
+  border: 0px none transparent;
+  padding: 0px;
+  overflow: hidden;
+  flex: 1;
+}
+
+#logs-area {
+  padding: 1em;
+  grid-area: right-sidebar;
+  background-color: lightgrey;
+  border-left: 1px dashed black;
+  display: flex;
+  flex-direction: column;
+}
+
+#logs {
+  flex: 1;
+  overflow: auto;
+}
+
+#example-page body {
+  display: flex;
+  flex-direction: column;
+}
+
+#example-page #example-header {
+  grid-area: header;
+  margin-top: 0.4em;
+  justify-self: stretch;
+}
+
+#example-page pre {
+  grid-area: code;
+  font-size: 0.7em;
+}
+
+#example-page .example-ui {
+  grid-area: ui;
+  display: flex;
+  flex-direction: column;
+}
+
+#example-page .example-ui > * {
+  margin-top: 1em;
+}
+
+#store-file-dropzone {
+  height: 4em;
+  background: lightgrey;
+  font-weight: bold;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+#store-file-dropzone:hover {
+  background: lightyellow;
+}
+
+#store-file-dropzone:dragover {
+  background: lightgreen;
+}
+
+#store-file-drop-size {
+  font-style: italic;
+}
+
+#store-mutablefile-text, #store-mutablefile-append-text {
+  width: 90%;
+  height: 6em;
+}
