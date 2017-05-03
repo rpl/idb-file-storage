@@ -81,8 +81,8 @@ describe("IDBFiles", () => {
       await tmpFiles.put("path2/filename.json", new File(["test content2"], "filename.json"));
 
       const testFilterOptions = async (filterOptions, cb) => {
-        let listResult = await tmpFiles.list(filterOptions);
-        let countResult = await tmpFiles.count(filterOptions);
+        const listResult = await tmpFiles.list(filterOptions);
+        const countResult = await tmpFiles.count(filterOptions);
 
         cb({listResult, countResult});
       };
@@ -134,7 +134,7 @@ describe("IDBFiles", () => {
         }
       ];
 
-      let waitAllTestCases = [];
+      const waitAllTestCases = [];
 
       for (const {filterOptions, test} of filterOptionsTestCases) {
         waitAllTestCases.push(testFilterOptions(filterOptions, test));

@@ -162,7 +162,7 @@ export class IDBPromisedFileHandle {
    */
   async getMetadata() {
     this.ensureLocked();
-    return await waitForDOMRequest(this.lockedFile.getMetadata());
+    return waitForDOMRequest(this.lockedFile.getMetadata());
   }
 
   /**
@@ -182,7 +182,7 @@ export class IDBPromisedFileHandle {
     if (typeof location === "number") {
       this.lockedFile.location = location;
     }
-    return await waitForDOMRequest(this.lockedFile.readAsText(size));
+    return waitForDOMRequest(this.lockedFile.readAsText(size));
   }
 
   /**
@@ -202,7 +202,7 @@ export class IDBPromisedFileHandle {
     if (typeof location === "number") {
       this.lockedFile.location = location;
     }
-    return await waitForDOMRequest(this.lockedFile.readAsArrayBuffer(size));
+    return waitForDOMRequest(this.lockedFile.readAsArrayBuffer(size));
   }
 
   /**
@@ -216,7 +216,7 @@ export class IDBPromisedFileHandle {
    */
   async truncate(location = 0) {
     this.ensureLocked({invalidMode: "readonly"});
-    return await waitForDOMRequest(this.lockedFile.truncate(location));
+    return waitForDOMRequest(this.lockedFile.truncate(location));
   }
 
   /**
@@ -230,7 +230,7 @@ export class IDBPromisedFileHandle {
    */
   async append(data) {
     this.ensureLocked({invalidMode: "readonly"});
-    return await waitForDOMRequest(this.lockedFile.append(data));
+    return waitForDOMRequest(this.lockedFile.append(data));
   }
 
   /**
@@ -249,7 +249,7 @@ export class IDBPromisedFileHandle {
     if (typeof location === "number") {
       this.lockedFile.location = location;
     }
-    return await waitForDOMRequest(
+    return waitForDOMRequest(
       this.lockedFile.write(data),
       // Resolves to the new location.
       () => {
@@ -412,7 +412,7 @@ export class IDBPromisedMutableFile {
       const fileRequestsIter = generatorFunction(lockedFile);
 
       const processFileRequestIter = prevRequestResult => {
-        let nextFileRequest = fileRequestsIter.next(prevRequestResult);
+        const nextFileRequest = fileRequestsIter.next(prevRequestResult);
         if (nextFileRequest.done) {
           resolve();
           return;
@@ -490,7 +490,7 @@ export class IDBFileStorage {
         }
       };
 
-      return await waitForDOMRequest(dbReq);
+      return waitForDOMRequest(dbReq);
     })();
 
     return this.initializedPromise;

@@ -10,15 +10,15 @@ const xo = require("gulp-xo");
 const KarmaServer = require("karma").Server;
 
 // Cleanup pending watch on user exit.
-process.on("SIGINT", function () {
+process.on("SIGINT", () => {
   process.exit();
 });
 
-gulp.task("umd", function () {
+gulp.task("umd", () => {
   return gulp.src("src/idb-file-storage.js")
     // Log errors on console and desktop notification.
     .pipe(plumber({
-      errorHandler: function (err) {
+      errorHandler(err) {
         console.error("UMD Build Error", err);
         this.emit("end");
         notify.onError("UMD Build Error: <%= error.message %>")(err);
@@ -44,18 +44,18 @@ gulp.task("umd", function () {
     .pipe(gulp.dest("dist/"));
 });
 
-gulp.task("watch", function () {
+gulp.task("watch", () => {
   gulp.watch("src/**/*.js", ["default"]);
 });
 
-gulp.task("test:unit", function (done) {
+gulp.task("test:unit", done => {
   new KarmaServer({
     configFile: path.join(__dirname, "karma.conf.js"),
     singleRun: true
   }, done).start();
 });
 
-gulp.task("test:unit:watch", function (done) {
+gulp.task("test:unit:watch", done => {
   new KarmaServer({
     configFile: path.join(__dirname, "karma.conf.js"),
     singleRun: false
