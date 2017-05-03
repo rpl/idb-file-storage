@@ -7,6 +7,10 @@ before_script:
   - export DISPLAY=:99.0
   - sh -e /etc/init.d/xvfb start
   - sleep 3
+script:
+  - echo "TEST dist/idb-file-storage.js UMD module" && npm run test
+  - echo "TEST dist/idb-file-storage.min.js minified UMD module" &&
+    KARMA_TEST_MINIFIED_LIB=1 npm run test
 addons:
   firefox: latest
   apt:
