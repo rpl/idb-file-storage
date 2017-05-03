@@ -1,6 +1,8 @@
 IDB File Storage
 ================
 
+[![Greenkeeper badge](https://badges.greenkeeper.io/rpl/idb-file-storage.svg)](https://greenkeeper.io/)
+
 **Status: Prototype/Proposal.**
 
 This library wraps some of the IndexedDB features related to store files into a Promised API.
