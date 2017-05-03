@@ -18,6 +18,11 @@ Even if not yet implemented, providing a polyfill for the [IDBMutableFile][IDBMu
 How to use it
 -------------
 
+A more detailed **API reference** is generated using esdoc from the inline comments,
+and it is available at the following url:
+
+- https://doc.esdoc.org/github.com/rpl/idb-file-storage/
+
 The library is wrapped as an UMD module, and so it can be included as a CommonJS
 module using a CommonJS module loader (e.g. webpack, browserify, rollup, ...) or
 as an AMD module from a AMD module loader (e.g. RequireJS), as well as just included
