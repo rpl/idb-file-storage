@@ -42,7 +42,7 @@
     "karma-notify-reporter": "1.0.1",
     "karma-phantomjs-launcher": "1.0.4",
     "karma-sinon": "1.0.5",
-    "mocha": "3.2.0",
+    "mocha": "3.3.0",
     "sinon": "1.17.7",
     "xo": "0.18.1"
   },
