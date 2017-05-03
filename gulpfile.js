@@ -7,6 +7,7 @@ const babel = require("gulp-babel");
 const notify = require("gulp-notify");
 const plumber = require("gulp-plumber");
 const xo = require("gulp-xo");
+const sourcemaps = require('gulp-sourcemaps');
 const KarmaServer = require("karma").Server;
 
 // Cleanup pending watch on user exit.
@@ -27,6 +28,7 @@ gulp.task("umd", () => {
     // Run js linting on every build.
     .pipe(xo())
     // Wrap as an UMD module.
+    .pipe(sourcemaps.init())
     .pipe(babel({
       babelrc: false,
       comments: true,
@@ -38,9 +40,9 @@ gulp.task("umd", () => {
           exactGlobals: true
         }]
       ],
-      sourceMap: true,
       moduleId: "idb-file-storage"
     }))
+    .pipe(sourcemaps.write("."))
     .pipe(gulp.dest("dist/"));
 });
 

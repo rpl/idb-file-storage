@@ -30,6 +30,7 @@
     "gulp-babel": "6.1.2",
     "gulp-notify": "3.0.0",
     "gulp-plumber": "1.1.0",
+    "gulp-sourcemaps": "2.6.0",
     "gulp-xo": "0.15.0",
     "karma": "1.6.0",
     "karma-babel-preprocessor": "6.0.1",
