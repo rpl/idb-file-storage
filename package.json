@@ -43,7 +43,7 @@
     "karma-phantomjs-launcher": "1.0.4",
     "karma-sinon": "1.0.5",
     "mocha": "3.3.0",
-    "sinon": "1.17.7",
+    "sinon": "2.2.0",
     "xo": "0.18.1"
   },
   "xo": {
