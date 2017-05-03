@@ -1,5 +1,7 @@
 "use strict";
 
+/* eslint-disable no-await-in-loop */
+
 describe("IDBFiles", () => {
   beforeEach(async () => {
     const tmpFiles = await IDBFiles.getFileStorage({name: "tmpFiles"});
@@ -145,7 +147,7 @@ describe("IDBFiles", () => {
       fhRw.append(fileContent);
 
       const fhRo = await mutableFile.open("readonly");
-      let metadata = await fhRo.getMetadata();
+      const metadata = await fhRo.getMetadata();
       expect(metadata.size).to.be.eql(fileSize);
     });
 
@@ -164,7 +166,7 @@ describe("IDBFiles", () => {
       fhRw.append(fileContent);
 
       const fhRo = await mutableFile.open("readonly");
-      let metadata = await fhRo.getMetadata();
+      const metadata = await fhRo.getMetadata();
       expect(metadata.size).to.be.eql(fileSize);
     });
 

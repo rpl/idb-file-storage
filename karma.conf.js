@@ -6,32 +6,32 @@ const TESTS = ["test/unit/common.js", "test/unit/**/test.*.js"];
 const COVERAGE_DIR = "coverage/";
 
 const preprocessors = {};
-SOURCES.forEach(function (src) {
+SOURCES.forEach(src => {
   preprocessors[src] = ["babel"];
 });
 
 module.exports = function (config) {
   config.set({
 
-    // base path that will be used to resolve all patterns (eg. files, exclude)
+    // Base path that will be used to resolve all patterns (eg. files, exclude)
     basePath: "",
 
-    // frameworks to use
+    // Frameworks to use
     // available frameworks: https://npmjs.org/browse/keyword/karma-adapter
     frameworks: ["mocha", "chai", "chai-as-promised", "sinon"],
 
-    // list of files / patterns to load in the browser
+    // List of files / patterns to load in the browser
     files: [].concat(SOURCES, TESTS),
 
-    // list of files to exclude
+    // List of files to exclude
     exclude: [
       "~*",
       "#*"
     ],
 
-    // preprocess matching files before serving them to the browser
+    // Preprocess matching files before serving them to the browser
     // available preprocessors: https://npmjs.org/browse/keyword/karma-preprocessor
-    preprocessors: preprocessors,
+    preprocessors,
 
     babelPreprocessor: {
       options: {
@@ -43,25 +43,25 @@ module.exports = function (config) {
       }
     },
 
-    // test results reporter to use
+    // Test results reporter to use
     // possible values: 'dots', 'progress'
     // available reporters: https://npmjs.org/browse/keyword/karma-reporter
     reporters: ["progress", "coverage", "notify"],
 
-    // web server port
+    // Web server port
     port: 9876,
 
-    // enable / disable colors in the output (reporters and logs)
+    // Enable / disable colors in the output (reporters and logs)
     colors: true,
 
-    // level of logging
+    // Level of logging
     // possible values: config.LOG_DISABLE || config.LOG_ERROR || config.LOG_WARN || config.LOG_INFO || config.LOG_DEBUG
     logLevel: config.LOG_INFO,
 
-    // enable / disable watching file and executing tests whenever any file changes
+    // Enable / disable watching file and executing tests whenever any file changes
     autoWatch: true,
 
-    // start these browsers
+    // Start these browsers
     // available browser launchers: https://npmjs.org/browse/keyword/karma-launcher
     browsers: ["Firefox", "Chrome"],
 
