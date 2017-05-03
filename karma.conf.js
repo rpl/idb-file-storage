@@ -1,7 +1,15 @@
 // Karma configuration
 // Generated on Mon Mar 13 2017 23:04:28 GMT+0100 (CET)
 
-const SOURCES = ["dist/idb-file-storage.js"];
+const SOURCES = [];
+
+if (process.env.KARMA_TEST_MINIFIED_LIB) {
+  console.log("NOTE: Testing minified file.");
+  SOURCES.push("dist/idb-file-storage.min.js");
+} else {
+  SOURCES.push("dist/idb-file-storage.js");
+}
+
 const TESTS = ["test/unit/common.js", "test/unit/**/test.*.js"];
 const COVERAGE_DIR = "coverage/";
 
