@@ -54,6 +54,12 @@
       "quotes": [
         "error",
         "double"
+      ],
+      "generator-star-spacing": [
+        "error", {
+          "before": false,
+          "after": true
+        }
       ]
     },
     "ignored": [
@@ -74,16 +80,7 @@
           "IDBFiles",
           "skipOnSupportedIDBMutableFile",
           "skipOnUnsupportedIDBMutableFile"
-        ],
-        "rules": {
-          "generator-star-spacing": [
-            "error",
-            {
-              "before": false,
-              "after": true
-            }
-          ]
-        }
+        ]
       }
     ]
   }
