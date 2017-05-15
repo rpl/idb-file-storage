@@ -355,9 +355,65 @@ export class IDBPromisedMutableFile {
    *
    * @returns {Promise<File>}
    *   A promise resolved to the File instance.
+   *
+   * To read the actual content of the mutable file as a File object,
+   * it is often better to use {@link IDBPromisedMutableFile.saveAsFileSnapshot}
+   * to save a persistent snapshot of the file in the IndexedDB store,
+   * or reading it directly using the {@link IDBPromisedFileHandle} instance
+   * returned by the {@link IDBPromisedMutableFile.open} method.
+   *
+   * The reason is that to be able to read the content of the returned file
+   * a lockfile have be keep the file open, e.d. as in the following example.
+   *
+   * @example
+   *     ...
+   *     let waitSnapshotStored;
+   *     await mutableFile.runFileRequestGenerator(function* (lockedFile) {
+   *       const file = yield lockedFile.mutableFile.getFile();
+   *       // read the file content or turn it into a persistent object of its own
+   *       // (e.g. by saving it back into IndexedDB as its snapshot in form of a File object,
+   *       // or converted into a data url, a string or an array buffer)
+   *
+   *       waitSnapshotStored = tmpFiles.put("${filename}/last_snapshot", file);
+   *     }
+   *
+   *     await waitSnapshotStored;
+   *     let fileSnapshot = await tmpFiles.get("${filename}/last_snapshot");
+   *     ...
+   *     // now you can use fileSnapshot even if the mutableFile lock is not active anymore.
    */
   getFile() {
     return waitForDOMRequest(this.mutableFile.getFile());
+  }
+
+  /**
+   * Persist the content of the mutable file into the files storage
+   * as a File, using the specified snapshot name and return the persisted File instance.
+   *
+   * @returns {Promise<File>}
+   *   A promise resolved to the File instance.
+   *
+   * @example
+   *
+   *      const file = await mutableFile.persistAsFileSnapshot(`${filename}/last_snapshot`);
+   *      const blobURL = URL.createObjectURL(file);
+   *      ...
+   *      // The blob URL is still valid even if the mutableFile is not active anymore.
+   */
+  async persistAsFileSnapshot(snapshotName) {
+    if (snapshotName === this.fileName) {
+      throw new Error("Snapshot name and the file name should be different");
+    }
+
+    const idb = await this.filesStorage.initializedDB();
+    await this.runFileRequestGenerator(function* () {
+      const file = yield this.mutableFile.getFile();
+      const objectStore = this.filesStorage.getObjectStoreTransaction({idb, mode: "readwrite"});
+
+      yield objectStore.put(file, snapshotName);
+    }.bind(this));
+
+    return this.filesStorage.get(snapshotName);
   }
 
   /**
@@ -416,7 +472,8 @@ export class IDBPromisedMutableFile {
         if (nextFileRequest.done) {
           resolve();
           return;
-        } else if (!(nextFileRequest.value instanceof window.DOMRequest)) {
+        } else if (!(nextFileRequest.value instanceof window.DOMRequest ||
+                     nextFileRequest.value instanceof window.IDBRequest)) {
           const error = new Error("FileRequestGenerator should only yield DOMRequest instances");
           fileRequestsIter.throw(error);
           reject(error);
