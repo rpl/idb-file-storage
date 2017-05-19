@@ -4,6 +4,7 @@ const path = require("path");
 
 const gulp = require("gulp");
 const babel = require("gulp-babel");
+const esdoc = require("gulp-esdoc");
 const notify = require("gulp-notify");
 const plumber = require("gulp-plumber");
 const xo = require("gulp-xo");
@@ -111,3 +112,31 @@ gulp.task("test:watch", ["default:watch", "test:unit:watch"]);
 
 gulp.task("default", ["umd", "umd:minified"]);
 gulp.task("default:watch", ["umd", "umd:minified", "watch"]);
+
+// API reference and gh-pages generation tasks.
+
+gulp.task("esdoc", () => {
+  gulp.src("./src")
+      .pipe(esdoc({destination: "./doc"}));
+});
+
+gulp.task("gh-pages:doc", ["esdoc"], () => {
+  gulp.src("doc/**/*")
+      .pipe(gulp.dest("./gh-pages/"));
+});
+
+gulp.task("gh-pages:dist", ["default"], () => {
+  gulp.src("dist/*")
+      .pipe(gulp.dest("./gh-pages/dist"));
+});
+
+gulp.task("gh-pages:examples", () => {
+  gulp.src("examples/*")
+      .pipe(gulp.dest("./gh-pages/examples"));
+});
+
+gulp.task("gh-pages", [
+  "gh-pages:doc",
+  "gh-pages:dist",
+  "gh-pages:examples"
+]);
