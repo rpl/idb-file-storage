@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <base data-ice="baseUrl">
+  <title data-ice="title">API Document</title>
+  <link type="text/css" rel="stylesheet" href="css/style.css">
+  <link type="text/css" rel="stylesheet" href="css/prettify-tomorrow.css">
+  <script src="script/prettify/prettify.js"></script>
+  
+  
+  <script src="script/manual.js"></script>
+</head>
+<body class="layout-container" data-ice="rootContainer">
+
+<header>
+  <a href="./">Home</a>
+  
+  <a href="identifiers.html">Reference</a>
+  <a href="source.html">Source</a>
+  
+  
+  <div class="search-box">
+  <span>
+    <img src="./image/search.png">
+    <span class="search-input-edge"></span><input class="search-input"><span class="search-input-edge"></span>
+  </span>
+    <ul class="search-result"></ul>
+  </div>
+</header>
+
+<nav class="navigation" data-ice="nav"><div>
+  <ul>
+    
+  <li data-ice="doc"><span data-ice="kind" class="kind-class">C</span><span data-ice="name"><span><a href="class/src/idb-file-storage.js~IDBFileStorage.html">IDBFileStorage</a></span></span></li>
+<li data-ice="doc"><span data-ice="kind" class="kind-class">C</span><span data-ice="name"><span><a href="class/src/idb-file-storage.js~IDBPromisedFileHandle.html">IDBPromisedFileHandle</a></span></span></li>
+<li data-ice="doc"><span data-ice="kind" class="kind-class">C</span><span data-ice="name"><span><a href="class/src/idb-file-storage.js~IDBPromisedMutableFile.html">IDBPromisedMutableFile</a></span></span></li>
+<li data-ice="doc"><span data-ice="kind" class="kind-function">F</span><span data-ice="name"><span><a href="function/index.html#static-function-getFileStorage">getFileStorage</a></span></span></li>
+<li data-ice="doc"><span data-ice="kind" class="kind-function">F</span><span data-ice="name"><span><a href="function/index.html#static-function-waitForDOMRequest">waitForDOMRequest</a></span></span></li>
+<li data-ice="doc"><span data-ice="kind" class="kind-typedef">T</span><span data-ice="name"><span><a href="typedef/index.html#static-typedef-IDBFileStorage.ListFilteringOptions">IDBFileStorage.ListFilteringOptions</a></span></span></li>
+<li data-ice="doc"><span data-ice="kind" class="kind-typedef">T</span><span data-ice="name"><span><a href="typedef/index.html#static-typedef-IDBPromisedFileHandle.Metadata">IDBPromisedFileHandle.Metadata</a></span></span></li>
+<li data-ice="doc"><span data-ice="kind" class="kind-external">E</span><span data-ice="name"><span><a href="https://developer.mozilla.org/en-US/docs/Web/API/Blob">Blob</a></span></span></li>
+<li data-ice="doc"><span data-ice="kind" class="kind-external">E</span><span data-ice="name"><span><a href="https://developer.mozilla.org/en/docs/Web/API/DOMRequest">DOMRequest</a></span></span></li>
+<li data-ice="doc"><span data-ice="kind" class="kind-external">E</span><span data-ice="name"><span><a href="https://developer.mozilla.org/en-US/docs/Web/API/File">File</a></span></span></li>
+<li data-ice="doc"><span data-ice="kind" class="kind-external">E</span><span data-ice="name"><span><a href="https://developer.mozilla.org/en-US/docs/Web/API/IDBMutableFile">IDBMutableFile</a></span></span></li>
+<li data-ice="doc"><span data-ice="kind" class="kind-external">E</span><span data-ice="name"><span><a href="https://developer.mozilla.org/en-US/docs/Web/API/IDBRequest">IDBRequest</a></span></span></li>
+</ul>
+</div>
+</nav>
+
+<div class="content" data-ice="content"><div data-ice="index" class="github-markdown"><h1 id="idb-file-storage">IDB File Storage</h1>
+<p><a href="https://travis-ci.org/rpl/atom-webextensions"><img src="https://travis-ci.org/rpl/atom-webextensions.svg?branch=master" alt="Build Status"></a>
+<a href="https://doc.esdoc.org/github.com/rpl/idb-file-storage"><img src="https://doc.esdoc.org/github.com/rpl/idb-file-storage/badge.svg" alt="esdoc Coverage"></a></p>
+<p><strong>Status: Prototype/Proposal.</strong></p>
+<p>This library wraps some of the IndexedDB features related to store files into a Promised API.</p>
+<p>While on Chrome this library only provides a basic API to store File and Blob instances,
+on Firefox it also provides a Promise based API wrapper for the non-standard <a href="https://developer.mozilla.org/en-US/docs/Web/API/IDBMutableFile">IDBMutableFile</a> API.</p>
+<p>The non-standard <a href="https://developer.mozilla.org/en-US/docs/Web/API/IDBMutableFile">IDBMutableFile</a> API allows to create and optionally persist into the an IndexedDB database a file object which provides an API to be able to read and change the file content without loading all its content in the memory.</p>
+<p>This library should allow WebExtensions add-ons to be able to store and manipulate files more efficiently, without providing direct access to arbitrary files on the user filesystem.</p>
+<p>The Promise based <a href="https://developer.mozilla.org/en-US/docs/Web/API/IDBMutableFile">IDBMutableFile</a> API is currently not available when this library runs on Chrome (e.g. as a Chrome extension), but it still works for storing and retrieving Blob and File instances.
+Even if not yet implemented, providing a polyfill for the <a href="https://developer.mozilla.org/en-US/docs/Web/API/IDBMutableFile">IDBMutableFile</a> API on Chrome based on Blob instances is technically possible.</p>
+<p>A more detailed <strong>API reference</strong> (generated using esdoc from the inline comments),
+and a collection of small examples are available at the following urls:</p>
+<ul>
+<li>API Reference: <a href="https://doc.esdoc.org/github.com/rpl/idb-file-storage/">https://doc.esdoc.org/github.com/rpl/idb-file-storage/</a></li>
+<li>Examples:<ul>
+<li>Live Demo: <a href="https://rpl.github.io/idb-file-storage/examples/">https://rpl.github.io/idb-file-storage/examples/</a></li>
+<li>Source: <a href="https://github.com/rpl/idb-file-storage/tree/master/examples/">https://github.com/rpl/idb-file-storage/tree/master/examples/</a></li>
+</ul>
+</li>
+</ul>
+<h2 id="how-to-use-it">How to use it</h2>
+<p>The library is wrapped as an UMD module, and so it can be included as a CommonJS
+module using a CommonJS module loader (e.g. webpack, browserify, rollup, ...) or
+as an AMD module from a AMD module loader (e.g. RequireJS), as well as just included
+as a tag script into an HTML page.</p>
+<pre><code class="lang-js"><code class="source-code prettyprint">async function testIDBFiles() {
+  const tmpFiles = await IDBFiles.getFileStorage({name: &quot;tmpFiles&quot;});
+
+  const file = await tmpFiles.createMutableFile(&quot;path/filename.txt&quot;);
+  const fh = file.open(&quot;readwrite&quot;);
+
+  const metadata = await fh.getMetadata();
+  console.log(metadata.size); // -&gt; 0
+
+  await fh.append(&quot;new file content&quot;);
+
+  const metadata = await fh.getMetadata();
+  console.log(metadata.size); // -&gt; updated size
+
+  await fh.close();
+
+  await file.persist();
+
+  const fileNames = await tmpFiles.list();
+  console.log(fileNames); // -&gt; [&quot;path/filename.txt&quot;]
+
+  const file = await tmpFiles.get(&quot;path/filename.txt&quot;);
+  // Only open if its a mutable file.
+  if (file.open) {
+    const fh = file.open(&quot;readonly&quot;);
+    const metadata = await fh.getMetadata();
+    console.log(metadata.size); // -&gt; updated size
+  }
+
+  await tmpFiles.clear(); // or tmpFiles.remove(&quot;path/filename.txt&quot;)
+  const fileNames = await tmpFiles.list();
+  console.log(fileNames); // -&gt; []
+}</code>
+</code></pre>
+<h2 id="building-testing-and-hacking">Building, Testing and Hacking</h2>
+<p>Building the source file into a UMD module (and lint the javascript sources in the process):</p>
+<pre><code><code class="source-code prettyprint">$ npm run build
+...</code>
+</code></pre><p>Running the karma tests (which also builds the library and open a Chrome and a Firefox instance and run the test on both):</p>
+<pre><code><code class="source-code prettyprint">$ npm run test</code>
+</code></pre><p>While working on the library or test sources, you may want to watch the sources for changes and lint, rebuild and re-run the tests accordingly:</p>
+<pre><code><code class="source-code prettyprint">$ npm run test:watch
+`</code>
+</code></pre></div>
+</div>
+
+<footer class="footer">
+  Generated by <a href="https://esdoc.org">ESDoc<span data-ice="esdocVersion">(0.5.2)</span><img src="./image/esdoc-logo-mini-black.png"></a>
+</footer>
+
+<script src="script/search_index.js"></script>
+<script src="script/search.js"></script>
+<script src="script/pretty-print.js"></script>
+<script src="script/inherited-summary.js"></script>
+<script src="script/test-summary.js"></script>
+<script src="script/inner-link.js"></script>
+<script src="script/patch-for-local.js"></script>
+</body>
+</html>

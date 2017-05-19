@@ -1,0 +1,12 @@
+{
+  "coverage": "100%",
+  "expectCount": 29,
+  "actualCount": 29,
+  "files": {
+    "src/idb-file-storage.js": {
+      "expectCount": 29,
+      "actualCount": 29,
+      "undocumentLines": []
+    }
+  }
+}

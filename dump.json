@@ -1,0 +1,2525 @@
+[
+  {
+    "__docId__": 0,
+    "kind": "file",
+    "name": "src/idb-file-storage.js",
+    "content": "\"use strict\";\n\n/**\n * @typedef {Object} IDBPromisedFileHandle.Metadata\n * @property {number} size\n *   The size of the file in bytes.\n * @property {Date} last Modified\n *   The time and date of the last change to the file.\n */\n\n/**\n * @typedef {Object} IDBFileStorage.ListFilteringOptions\n * @property {string} startsWith\n *   A string to be checked with `fileNameString.startsWith(...)`.\n * @property {string} endsWith\n *   A string to be checked with  `fileNameString.endsWith(...)`.\n * @property {string} includes\n *   A string to be checked with `fileNameString.includes(...)`.\n * @property {function} filterFn\n *   A function to be used to check the file name (`filterFn(fileNameString)`).\n */\n\n/**\n * Wraps a DOMRequest into a promise, optionally transforming the result using the onsuccess\n * callback.\n *\n * @param {IDBRequest|DOMRequest} req\n *   The DOMRequest instance to wrap in a Promise.\n * @param {function}  [onsuccess]\n *   An optional onsuccess callback which can transform the result before resolving it.\n *\n * @returns {Promise}\n *   The promise which wraps the request result, rejected if the request.onerror has been\n *   called.\n */\nexport function waitForDOMRequest(req, onsuccess) {\n  return new Promise((resolve, reject) => {\n    req.onsuccess = onsuccess ?\n      (() => resolve(onsuccess(req.result))) : (() => resolve(req.result));\n    req.onerror = () => reject(req.error);\n  });\n}\n\n/**\n * Wraps an IDBMutableFile's FileHandle with a nicer Promise-based API.\n *\n * Instances of this class are created from the\n * {@link IDBPromisedMutableFile.open} method.\n */\nexport class IDBPromisedFileHandle {\n  /**\n   * @private private helper method used internally.\n   */\n  constructor({file, lockedFile}) {\n    // All the following properties are private and it should not be needed\n    // while using the API.\n\n    /** @private */\n    this.file = file;\n    /** @private */\n    this.lockedFile = lockedFile;\n    /** @private */\n    this.writeQueue = Promise.resolve();\n    /** @private */\n    this.closed = undefined;\n    /** @private */\n    this.aborted = undefined;\n  }\n\n  /**\n   * @private private helper method used internally.\n   */\n  ensureLocked({invalidMode} = {}) {\n    if (this.closed) {\n      throw new Error(\"FileHandle has been closed\");\n    }\n\n    if (this.aborted) {\n      throw new Error(\"FileHandle has been aborted\");\n    }\n\n    if (!this.lockedFile) {\n      throw new Error(\"Invalid FileHandled\");\n    }\n\n    if (invalidMode && this.lockedFile.mode === invalidMode) {\n      throw new Error(`FileHandle should not be opened as '${this.lockedFile.mode}'`);\n    }\n    if (!this.lockedFile.active) {\n      // Automatically relock the file with the last open mode\n      this.file.reopenFileHandle(this);\n    }\n  }\n\n  // Promise-based MutableFile API\n\n  /**\n   * Provide access to the mode that has been used to open the {@link IDBPromisedMutableFile}.\n   *\n   * @type {\"readonly\"|\"readwrite\"|\"writeonly\"}\n   */\n  get mode() {\n    return this.lockedFile.mode;\n  }\n\n  /**\n   * A boolean property that is true if the lock is still active.\n   *\n   * @type {boolean}\n   */\n  get active() {\n    return this.lockedFile ? this.lockedFile.active : false;\n  }\n\n  /**\n   * Close the locked file (and wait for any written data to be flushed if needed).\n   *\n   * @returns {Promise}\n   *   A promise which is resolved when the close request has been completed\n   */\n  async close() {\n    if (!this.lockedFile) {\n      throw new Error(\"FileHandle is not open\");\n    }\n\n    // Wait the queued write to complete.\n    await this.writeQueue;\n\n    // Wait for flush request to complete if needed.\n    if (this.lockedFile.active && this.lockedFile.mode !== \"readonly\") {\n      await waitForDOMRequest(this.lockedFile.flush());\n    }\n\n    this.closed = true;\n    this.lockedFile = null;\n    this.writeQueue = Promise.resolve();\n  }\n\n  /**\n   * Abort any pending data request and set the instance as aborted.\n   *\n   * @returns {Promise}\n   *   A promise which is resolved when the abort request has been completed\n   */\n  async abort() {\n    if (this.lockedFile.active) {\n      // NOTE: in the docs abort is reported to return a DOMRequest, but it doesn't seem\n      // to be the case. (https://developer.mozilla.org/en-US/docs/Web/API/LockedFile/abort)\n      this.lockedFile.abort();\n    }\n\n    this.aborted = true;\n    this.lockedFile = null;\n    this.writeQueue = Promise.resolve();\n  }\n\n  /**\n   * Get the file metadata (take a look to {@link IDBPromisedFileHandle.Metadata} for more info).\n   *\n   * @returns {Promise<{size: number, lastModified: Date}>}\n   *   A promise which is resolved when the request has been completed\n   */\n  async getMetadata() {\n    this.ensureLocked();\n    return waitForDOMRequest(this.lockedFile.getMetadata());\n  }\n\n  /**\n   * Read a given amount of data from the file as Text (optionally starting from the specified\n   * location).\n   *\n   * @param {number} size\n   *   The amount of data to read.\n   * @param {number} [location]\n   *   The location where the request should start to read the data.\n   *\n   * @returns {Promise<string>}\n   *   A promise which resolves to the data read, when the request has been completed.\n   */\n  async readAsText(size, location) {\n    this.ensureLocked({invalidMode: \"writeonly\"});\n    if (typeof location === \"number\") {\n      this.lockedFile.location = location;\n    }\n    return waitForDOMRequest(this.lockedFile.readAsText(size));\n  }\n\n  /**\n   * Read a given amount of data from the file as an ArrayBufer (optionally starting from the specified\n   * location).\n   *\n   * @param {number} size\n   *   The amount of data to read.\n   * @param {number} [location]\n   *   The location where the request should start to read the data.\n   *\n   * @returns {Promise<ArrayBuffer>}\n   *   A promise which resolves to the data read, when the request has been completed.\n   */\n  async readAsArrayBuffer(size, location) {\n    this.ensureLocked({invalidMode: \"writeonly\"});\n    if (typeof location === \"number\") {\n      this.lockedFile.location = location;\n    }\n    return waitForDOMRequest(this.lockedFile.readAsArrayBuffer(size));\n  }\n\n  /**\n   * Truncate the file (optionally at a specified location).\n   *\n   * @param {number} [location=0]\n   *   The location where the file should be truncated.\n   *\n   * @returns {Promise<ArrayBuffer>}\n   *   A promise which is resolved once the request has been completed.\n   */\n  async truncate(location = 0) {\n    this.ensureLocked({invalidMode: \"readonly\"});\n    return waitForDOMRequest(this.lockedFile.truncate(location));\n  }\n\n  /**\n   * Append the passed data to the end of the file.\n   *\n   * @param {string|ArrayBuffer} data\n   *   The data to append to the end of the file.\n   *\n   * @returns {Promise}\n   *   A promise which is resolved once the request has been completed.\n   */\n  async append(data) {\n    this.ensureLocked({invalidMode: \"readonly\"});\n    return waitForDOMRequest(this.lockedFile.append(data));\n  }\n\n  /**\n   * Write data into the file (optionally starting from a defined location in the file).\n   *\n   * @param {string|ArrayBuffer} data\n   *   The data to write into the file.\n   * @param {number} location\n   *   The location where the data should be written.\n   *\n   * @returns {Promise<number>}\n   *   A promise which is resolved to the location where the written data ends.\n   */\n  async write(data, location) {\n    this.ensureLocked({invalidMode: \"readonly\"});\n    if (typeof location === \"number\") {\n      this.lockedFile.location = location;\n    }\n    return waitForDOMRequest(\n      this.lockedFile.write(data),\n      // Resolves to the new location.\n      () => {\n        return this.lockedFile.location;\n      }\n    );\n  }\n\n  /**\n   * Queue data to be written into the file (optionally starting from a defined location in the file).\n   *\n   * @param {string|ArrayBuffer} data\n   *   The data to write into the file.\n   * @param {number} location\n   *   The location where the data should be written (when not specified the end of the previous\n   *   queued write is used).\n   *\n   * @returns {Promise<number>}\n   *   A promise which is resolved once the request has been completed with the location where the\n   *   file was after the data has been writted.\n   */\n  queuedWrite(data, location) {\n    const nextWriteRequest = async lastLocation => {\n      this.ensureLocked({invalidMode: \"readonly\"});\n\n      if (typeof location === \"number\") {\n        return this.write(data, location);\n      }\n      return this.write(data, lastLocation);\n    };\n\n    this.writeQueue = this.writeQueue.then(nextWriteRequest);\n    return this.writeQueue;\n  }\n\n  /**\n   * Wait that any queued data has been written.\n   *\n   * @returns {Promise<number>}\n   *   A promise which is resolved once the request has been completed with the location where the\n   *   file was after the data has been writted.\n   */\n  async waitForQueuedWrites() {\n    await this.writeQueue;\n  }\n}\n\n/**\n * Wraps an IDBMutableFile with a nicer Promise-based API.\n *\n * Instances of this class are created from the\n * {@link IDBFileStorage.createMutableFile} method.\n */\nexport class IDBPromisedMutableFile {\n  /**\n   * @private private helper method used internally.\n   */\n  constructor({filesStorage, idb, fileName, fileType, mutableFile}) {\n    // All the following properties are private and it should not be needed\n    // while using the API.\n\n    /** @private */\n    this.filesStorage = filesStorage;\n    /** @private */\n    this.idb = idb;\n    /** @private */\n    this.fileName = fileName;\n    /** @private */\n    this.fileType = fileType;\n    /** @private */\n    this.mutableFile = mutableFile;\n  }\n\n  /**\n   * @private private helper method used internally.\n   */\n  reopenFileHandle(fileHandle) {\n    fileHandle.lockedFile = this.mutableFile.open(fileHandle.mode);\n  }\n\n  // API methods.\n\n  /**\n   * Open a mutable file for reading/writing data.\n   *\n   * @param {\"readonly\"|\"readwrite\"|\"writeonly\"} mode\n   *   The mode of the created IDBPromisedFileHandle instance.\n   *\n   * @returns {IDBPromisedFileHandle}\n   *   The created IDBPromisedFileHandle instance.\n   */\n  open(mode) {\n    if (this.lockedFile) {\n      throw new Error(\"MutableFile cannot be opened twice\");\n    }\n    const lockedFile = this.mutableFile.open(mode);\n\n    return new IDBPromisedFileHandle({file: this, lockedFile});\n  }\n\n  /**\n   * Get a {@link File} instance of this mutable file.\n   *\n   * @returns {Promise<File>}\n   *   A promise resolved to the File instance.\n   *\n   * To read the actual content of the mutable file as a File object,\n   * it is often better to use {@link IDBPromisedMutableFile.saveAsFileSnapshot}\n   * to save a persistent snapshot of the file in the IndexedDB store,\n   * or reading it directly using the {@link IDBPromisedFileHandle} instance\n   * returned by the {@link IDBPromisedMutableFile.open} method.\n   *\n   * The reason is that to be able to read the content of the returned file\n   * a lockfile have be keep the file open, e.d. as in the following example.\n   *\n   * @example\n   *     ...\n   *     let waitSnapshotStored;\n   *     await mutableFile.runFileRequestGenerator(function* (lockedFile) {\n   *       const file = yield lockedFile.mutableFile.getFile();\n   *       // read the file content or turn it into a persistent object of its own\n   *       // (e.g. by saving it back into IndexedDB as its snapshot in form of a File object,\n   *       // or converted into a data url, a string or an array buffer)\n   *\n   *       waitSnapshotStored = tmpFiles.put(\"${filename}/last_snapshot\", file);\n   *     }\n   *\n   *     await waitSnapshotStored;\n   *     let fileSnapshot = await tmpFiles.get(\"${filename}/last_snapshot\");\n   *     ...\n   *     // now you can use fileSnapshot even if the mutableFile lock is not active anymore.\n   */\n  getFile() {\n    return waitForDOMRequest(this.mutableFile.getFile());\n  }\n\n  /**\n   * Persist the content of the mutable file into the files storage\n   * as a File, using the specified snapshot name and return the persisted File instance.\n   *\n   * @returns {Promise<File>}\n   *   A promise resolved to the File instance.\n   *\n   * @example\n   *\n   *      const file = await mutableFile.persistAsFileSnapshot(`${filename}/last_snapshot`);\n   *      const blobURL = URL.createObjectURL(file);\n   *      ...\n   *      // The blob URL is still valid even if the mutableFile is not active anymore.\n   */\n  async persistAsFileSnapshot(snapshotName) {\n    if (snapshotName === this.fileName) {\n      throw new Error(\"Snapshot name and the file name should be different\");\n    }\n\n    const idb = await this.filesStorage.initializedDB();\n    await this.runFileRequestGenerator(function* () {\n      const file = yield this.mutableFile.getFile();\n      const objectStore = this.filesStorage.getObjectStoreTransaction({idb, mode: \"readwrite\"});\n\n      yield objectStore.put(file, snapshotName);\n    }.bind(this));\n\n    return this.filesStorage.get(snapshotName);\n  }\n\n  /**\n   * Persist the this mutable file into its related IDBFileStorage.\n   *\n   * @returns {Promise}\n   *   A promise resolved on the mutable file has been persisted into IndexedDB.\n   */\n  persist() {\n    return this.filesStorage.put(this.fileName, this);\n  }\n\n  /**\n   * Run a generator function which can run a sequence of FileRequests\n   * without the lockfile to become inactive.\n   *\n   * This method should be rarely needed, mostly to optimize a sequence of\n   * file operations without the file to be closed and automatically re-opened\n   * between two file requests.\n   *\n   * @param {function* (lockedFile) {...}} generatorFunction\n   * @param {\"readonly\"|\"readwrite\"|\"writeonly\"} mode\n   *\n   * @example\n   *   (async function () {\n   *      const tmpFiles = await IDBFiles.getFileStorage({name: \"tmpFiles\"});\n   *      const mutableFile = await tmpFiles.createMutableFile(\"test-mutable-file.txt\");\n   *\n   *      let allFileData;\n   *\n   *      function* fileOperations(lockedFile) {\n   *        yield lockedFile.write(\"some data\");\n   *        yield lockedFile.write(\"more data\");\n   *        const metadata = yield lockedFile.getMetadata();\n   *\n   *        lockedFile.location = 0;\n   *        allFileData = yield lockedFile.readAsText(metadata.size);\n   *      }\n   *\n   *      await mutableFile.runFileRequestGenerator(fileOperations, \"readwrite\");\n   *\n   *      console.log(\"File Data\", allFileData);\n   *   })();\n   */\n  async runFileRequestGenerator(generatorFunction, mode) {\n    if (generatorFunction.constructor.name !== \"GeneratorFunction\") {\n      throw new Error(\"runGenerator parameter should be a generator function\");\n    }\n\n    await new Promise((resolve, reject) => {\n      const lockedFile = this.mutableFile.open(mode || \"readwrite\");\n      const fileRequestsIter = generatorFunction(lockedFile);\n\n      const processFileRequestIter = prevRequestResult => {\n        const nextFileRequest = fileRequestsIter.next(prevRequestResult);\n        if (nextFileRequest.done) {\n          resolve();\n          return;\n        } else if (!(nextFileRequest.value instanceof window.DOMRequest ||\n                     nextFileRequest.value instanceof window.IDBRequest)) {\n          const error = new Error(\"FileRequestGenerator should only yield DOMRequest instances\");\n          fileRequestsIter.throw(error);\n          reject(error);\n          return;\n        }\n\n        const request = nextFileRequest.value;\n        if (request.onsuccess || request.onerror) {\n          const error = new Error(\"DOMRequest onsuccess/onerror callbacks are already set\");\n          fileRequestsIter.throw(error);\n          reject(error);\n        } else {\n          request.onsuccess = () => processFileRequestIter(request.result);\n          request.onerror = () => reject(request.error);\n        }\n      };\n\n      processFileRequestIter();\n    });\n  }\n}\n\n/**\n * Provides a Promise-based API to store files into an IndexedDB.\n *\n * Instances of this class are created using the exported\n * {@link getFileStorage} function.\n */\nexport class IDBFileStorage {\n  /**\n   * @private private helper method used internally.\n   */\n  constructor({name, persistent} = {}) {\n    // All the following properties are private and it should not be needed\n    // while using the API.\n\n    /** @private */\n    this.name = name;\n    /** @private */\n    this.persistent = persistent;\n    /** @private */\n    this.indexedDBName = `IDBFilesStorage-DB-${this.name}`;\n    /** @private */\n    this.objectStorageName = \"IDBFilesObjectStorage\";\n    /** @private */\n    this.initializedPromise = undefined;\n\n    // TODO: evalutate schema migration between library versions?\n    /** @private */\n    this.version = 1.0;\n  }\n\n  /**\n   * @private private helper method used internally.\n   */\n  initializedDB() {\n    if (this.initializedPromise) {\n      return this.initializedPromise;\n    }\n\n    this.initializedPromise = (async () => {\n      if (window.IDBMutableFile && this.persistent) {\n        this.version = {version: this.version, storage: \"persistent\"};\n      }\n      const dbReq = indexedDB.open(this.indexedDBName, this.version);\n\n      dbReq.onupgradeneeded = () => {\n        const db = dbReq.result;\n        if (!db.objectStoreNames.contains(this.objectStorageName)) {\n          db.createObjectStore(this.objectStorageName);\n        }\n      };\n\n      return waitForDOMRequest(dbReq);\n    })();\n\n    return this.initializedPromise;\n  }\n\n  /**\n   * @private private helper method used internally.\n   */\n  getObjectStoreTransaction({idb, mode} = {}) {\n    const transaction = idb.transaction([this.objectStorageName], mode);\n    return transaction.objectStore(this.objectStorageName);\n  }\n\n  /**\n   * Create a new IDBPromisedMutableFile instance (where the IDBMutableFile is supported)\n   *\n   * @param {string} fileName\n   *   The fileName associated to the new IDBPromisedMutableFile instance.\n   * @param {string} [fileType=\"text\"]\n   *   The mime type associated to the file.\n   *\n   * @returns {IDBPromisedMutableFile}\n   *   The newly created {@link IDBPromisedMutableFile} instance.\n   */\n  async createMutableFile(fileName, fileType = \"text\") {\n    if (!window.IDBMutableFile) {\n      throw new Error(\"This environment does not support IDBMutableFile\");\n    }\n    const idb = await this.initializedDB();\n    const mutableFile = await waitForDOMRequest(\n      idb.createMutableFile(fileName, fileType)\n    );\n    return new IDBPromisedMutableFile({\n      filesStorage: this, idb, fileName, fileType, mutableFile\n    });\n  }\n\n  /**\n   * Put a file object into the IDBFileStorage, it overwrites an existent file saved with the\n   * fileName if any.\n   *\n   * @param {string} fileName\n   *   The key associated to the file in the IDBFileStorage.\n   * @param {Blob|File|IDBPromisedMutableFile|IDBMutableFile} file\n   *   The file to be persisted.\n   *\n   * @returns {Promise}\n   *   A promise resolved when the request has been completed.\n   */\n  async put(fileName, file) {\n    if (!fileName || typeof fileName !== \"string\") {\n      throw new Error(\"fileName parameter is mandatory\");\n    }\n\n    if (!(file instanceof File) && !(file instanceof Blob) &&\n        !(window.IDBMutableFile && file instanceof window.IDBMutableFile) &&\n        !(file instanceof IDBPromisedMutableFile)) {\n      throw new Error(`Unable to persist ${fileName}. Unknown file type.`);\n    }\n\n    if (file instanceof IDBPromisedMutableFile) {\n      file = file.mutableFile;\n    }\n\n    const idb = await this.initializedDB();\n    const objectStore = this.getObjectStoreTransaction({idb, mode: \"readwrite\"});\n    return waitForDOMRequest(objectStore.put(file, fileName));\n  }\n\n  /**\n   * Remove a file object from the IDBFileStorage.\n   *\n   * @param {string} fileName\n   *   The fileName (the associated IndexedDB key) to remove from the IDBFileStorage.\n   *\n   * @returns {Promise}\n   *   A promise resolved when the request has been completed.\n   */\n  async remove(fileName) {\n    if (!fileName) {\n      throw new Error(\"fileName parameter is mandatory\");\n    }\n\n    const idb = await this.initializedDB();\n    const objectStore = this.getObjectStoreTransaction({idb, mode: \"readwrite\"});\n    return waitForDOMRequest(objectStore.delete(fileName));\n  }\n\n  /**\n   * List the names of the files stored in the IDBFileStorage.\n   *\n   * (If any filtering options has been specified, only the file names that match\n   * all the filters are included in the result).\n   *\n   * @param {IDBFileStorage.ListFilteringOptions} options\n   *   The optional filters to apply while listing the stored file names.\n   *\n   * @returns {Promise<string[]>}\n   *   A promise resolved to the array of the filenames that has been found.\n   */\n  async list(options) {\n    const idb = await this.initializedDB();\n    const objectStore = this.getObjectStoreTransaction({idb});\n    const allKeys = await waitForDOMRequest(objectStore.getAllKeys());\n\n    let filteredKeys = allKeys;\n\n    if (options) {\n      filteredKeys = filteredKeys.filter(key => {\n        let match = true;\n\n        if (typeof options.startsWith === \"string\") {\n          match = match && key.startsWith(options.startsWith);\n        }\n\n        if (typeof options.endsWith === \"string\") {\n          match = match && key.endsWith(options.endsWith);\n        }\n\n        if (typeof options.includes === \"string\") {\n          match = match && key.includes(options.includes);\n        }\n\n        if (typeof options.filterFn === \"function\") {\n          match = match && options.filterFn(key);\n        }\n\n        return match;\n      });\n    }\n\n    return filteredKeys;\n  }\n\n  /**\n   * Count the number of files stored in the IDBFileStorage.\n   *\n   * (If any filtering options has been specified, only the file names that match\n   * all the filters are included in the final count).\n   *\n   * @param {IDBFileStorage.ListFilteringOptions} options\n   *   The optional filters to apply while listing the stored file names.\n   *\n   * @returns {Promise<number>}\n   *   A promise resolved to the number of files that has been found.\n   */\n  async count(options) {\n    if (!options) {\n      const idb = await this.initializedDB();\n      const objectStore = this.getObjectStoreTransaction({idb});\n      return waitForDOMRequest(objectStore.count());\n    }\n\n    const filteredKeys = await this.list(options);\n    return filteredKeys.length;\n  }\n\n  /**\n   * Retrieve a file stored in the IDBFileStorage by key.\n   *\n   * @param {string} fileName\n   *   The key to use to retrieve the file from the IDBFileStorage.\n   *\n   * @returns {Promise<Blob|File|IDBPromisedMutableFile>}\n   *   A promise resolved once the file stored in the IDBFileStorage has been retrieved.\n   */\n  async get(fileName) {\n    const idb = await this.initializedDB();\n    const objectStore = this.getObjectStoreTransaction({idb});\n    return waitForDOMRequest(objectStore.get(fileName)).then(result => {\n      if (window.IDBMutableFile && result instanceof window.IDBMutableFile) {\n        return new IDBPromisedMutableFile({\n          filesStorage: this,\n          idb,\n          fileName,\n          fileType: result.type,\n          mutableFile: result\n        });\n      }\n\n      return result;\n    });\n  }\n\n  /**\n   * Remove all the file objects stored in the IDBFileStorage.\n   *\n   * @returns {Promise}\n   *   A promise resolved once the IDBFileStorage has been cleared.\n   */\n  async clear() {\n    const idb = await this.initializedDB();\n    const objectStore = this.getObjectStoreTransaction({idb, mode: \"readwrite\"});\n    return waitForDOMRequest(objectStore.clear());\n  }\n}\n\n/**\n * Retrieve an IDBFileStorage instance by name (and it creates the indexedDB if it doesn't\n * exist yet).\n *\n * @param {Object} [param]\n * @param {string} [param.name=\"default\"]\n *   The name associated to the IDB File Storage.\n * @param {boolean} [param.persistent]\n *   Optionally enable persistent storage mode (not enabled by default).\n *\n * @returns {IDBFileStorage}\n *   The IDBFileStorage instance with the given name.\n */\nexport async function getFileStorage({name, persistent} = {}) {\n  const filesStorage = new IDBFileStorage({name: name || \"default\", persistent});\n  await filesStorage.initializedDB();\n  return filesStorage;\n}\n\n/**\n * @external {Blob} https://developer.mozilla.org/en-US/docs/Web/API/Blob\n */\n\n/**\n * @external {DOMRequest} https://developer.mozilla.org/en/docs/Web/API/DOMRequest\n */\n\n/**\n * @external {File} https://developer.mozilla.org/en-US/docs/Web/API/File\n */\n\n/**\n * @external {IDBMutableFile} https://developer.mozilla.org/en-US/docs/Web/API/IDBMutableFile\n */\n\n/**\n * @external {IDBRequest} https://developer.mozilla.org/en-US/docs/Web/API/IDBRequest\n */\n",
+    "static": true,
+    "longname": "src/idb-file-storage.js",
+    "access": null,
+    "description": null,
+    "lineNumber": 1
+  },
+  {
+    "__docId__": 1,
+    "kind": "typedef",
+    "name": "IDBPromisedFileHandle.Metadata",
+    "memberof": "src/idb-file-storage.js",
+    "static": true,
+    "longname": "src/idb-file-storage.js~IDBPromisedFileHandle.Metadata",
+    "access": null,
+    "description": "",
+    "properties": [
+      {
+        "nullable": null,
+        "types": [
+          "number"
+        ],
+        "spread": false,
+        "optional": false,
+        "name": "size",
+        "description": "The size of the file in bytes."
+      },
+      {
+        "nullable": null,
+        "types": [
+          "Date"
+        ],
+        "spread": false,
+        "optional": false,
+        "name": "last",
+        "description": "Modified\n  The time and date of the last change to the file."
+      }
+    ],
+    "type": {
+      "types": [
+        "Object"
+      ],
+      "optional": false,
+      "name": "IDBPromisedFileHandle.Metadata"
+    }
+  },
+  {
+    "__docId__": 2,
+    "kind": "typedef",
+    "name": "IDBFileStorage.ListFilteringOptions",
+    "memberof": "src/idb-file-storage.js",
+    "static": true,
+    "longname": "src/idb-file-storage.js~IDBFileStorage.ListFilteringOptions",
+    "access": null,
+    "description": "",
+    "properties": [
+      {
+        "nullable": null,
+        "types": [
+          "string"
+        ],
+        "spread": false,
+        "optional": false,
+        "name": "startsWith",
+        "description": "A string to be checked with `fileNameString.startsWith(...)`."
+      },
+      {
+        "nullable": null,
+        "types": [
+          "string"
+        ],
+        "spread": false,
+        "optional": false,
+        "name": "endsWith",
+        "description": "A string to be checked with  `fileNameString.endsWith(...)`."
+      },
+      {
+        "nullable": null,
+        "types": [
+          "string"
+        ],
+        "spread": false,
+        "optional": false,
+        "name": "includes",
+        "description": "A string to be checked with `fileNameString.includes(...)`."
+      },
+      {
+        "nullable": null,
+        "types": [
+          "function"
+        ],
+        "spread": false,
+        "optional": false,
+        "name": "filterFn",
+        "description": "A function to be used to check the file name (`filterFn(fileNameString)`)."
+      }
+    ],
+    "type": {
+      "types": [
+        "Object"
+      ],
+      "optional": false,
+      "name": "IDBFileStorage.ListFilteringOptions"
+    }
+  },
+  {
+    "__docId__": 3,
+    "kind": "function",
+    "name": "waitForDOMRequest",
+    "memberof": "src/idb-file-storage.js",
+    "generator": false,
+    "async": false,
+    "static": true,
+    "longname": "src/idb-file-storage.js~waitForDOMRequest",
+    "access": null,
+    "export": true,
+    "importPath": "idb-file-storage/src/idb-file-storage.js",
+    "importStyle": "{waitForDOMRequest}",
+    "description": "Wraps a DOMRequest into a promise, optionally transforming the result using the onsuccess\ncallback.",
+    "lineNumber": 36,
+    "unknown": [
+      {
+        "tagName": "@returns",
+        "tagValue": "{Promise}\n  The promise which wraps the request result, rejected if the request.onerror has been\n  called."
+      }
+    ],
+    "params": [
+      {
+        "nullable": null,
+        "types": [
+          "IDBRequest",
+          "DOMRequest"
+        ],
+        "spread": false,
+        "optional": false,
+        "name": "req",
+        "description": "The DOMRequest instance to wrap in a Promise."
+      },
+      {
+        "nullable": null,
+        "types": [
+          "function"
+        ],
+        "spread": false,
+        "optional": true,
+        "name": "onsuccess",
+        "description": "An optional onsuccess callback which can transform the result before resolving it."
+      }
+    ],
+    "return": {
+      "nullable": null,
+      "types": [
+        "Promise"
+      ],
+      "spread": false,
+      "description": "The promise which wraps the request result, rejected if the request.onerror has been\n  called."
+    }
+  },
+  {
+    "__docId__": 4,
+    "kind": "class",
+    "name": "IDBPromisedFileHandle",
+    "memberof": "src/idb-file-storage.js",
+    "static": true,
+    "longname": "src/idb-file-storage.js~IDBPromisedFileHandle",
+    "access": null,
+    "export": true,
+    "importPath": "idb-file-storage/src/idb-file-storage.js",
+    "importStyle": "{IDBPromisedFileHandle}",
+    "description": "Wraps an IDBMutableFile's FileHandle with a nicer Promise-based API.\n\nInstances of this class are created from the\n{@link IDBPromisedMutableFile.open} method.",
+    "lineNumber": 50,
+    "interface": false
+  },
+  {
+    "__docId__": 5,
+    "kind": "constructor",
+    "name": "constructor",
+    "memberof": "src/idb-file-storage.js~IDBPromisedFileHandle",
+    "generator": false,
+    "async": false,
+    "static": false,
+    "longname": "src/idb-file-storage.js~IDBPromisedFileHandle#constructor",
+    "access": "private",
+    "description": "",
+    "lineNumber": 54,
+    "params": [
+      {
+        "name": "objectPattern",
+        "types": [
+          "{\"file\": *, \"lockedFile\": *}"
+        ],
+        "defaultRaw": {
+          "file": null,
+          "lockedFile": null
+        },
+        "defaultValue": "{\"file\":null,\"lockedFile\":null}"
+      }
+    ]
+  },
+  {
+    "__docId__": 6,
+    "kind": "member",
+    "name": "file",
+    "memberof": "src/idb-file-storage.js~IDBPromisedFileHandle",
+    "static": false,
+    "longname": "src/idb-file-storage.js~IDBPromisedFileHandle#file",
+    "access": "private",
+    "description": null,
+    "lineNumber": 59,
+    "type": {
+      "types": [
+        "*"
+      ]
+    }
+  },
+  {
+    "__docId__": 7,
+    "kind": "member",
+    "name": "lockedFile",
+    "memberof": "src/idb-file-storage.js~IDBPromisedFileHandle",
+    "static": false,
+    "longname": "src/idb-file-storage.js~IDBPromisedFileHandle#lockedFile",
+    "access": "private",
+    "description": null,
+    "lineNumber": 61,
+    "type": {
+      "types": [
+        "*"
+      ]
+    }
+  },
+  {
+    "__docId__": 8,
+    "kind": "member",
+    "name": "writeQueue",
+    "memberof": "src/idb-file-storage.js~IDBPromisedFileHandle",
+    "static": false,
+    "longname": "src/idb-file-storage.js~IDBPromisedFileHandle#writeQueue",
+    "access": "private",
+    "description": null,
+    "lineNumber": 63,
+    "type": {
+      "types": [
+        "*"
+      ]
+    }
+  },
+  {
+    "__docId__": 9,
+    "kind": "member",
+    "name": "closed",
+    "memberof": "src/idb-file-storage.js~IDBPromisedFileHandle",
+    "static": false,
+    "longname": "src/idb-file-storage.js~IDBPromisedFileHandle#closed",
+    "access": "private",
+    "description": null,
+    "lineNumber": 65,
+    "type": {
+      "types": [
+        "*"
+      ]
+    }
+  },
+  {
+    "__docId__": 10,
+    "kind": "member",
+    "name": "aborted",
+    "memberof": "src/idb-file-storage.js~IDBPromisedFileHandle",
+    "static": false,
+    "longname": "src/idb-file-storage.js~IDBPromisedFileHandle#aborted",
+    "access": "private",
+    "description": null,
+    "lineNumber": 67,
+    "type": {
+      "types": [
+        "*"
+      ]
+    }
+  },
+  {
+    "__docId__": 11,
+    "kind": "method",
+    "name": "ensureLocked",
+    "memberof": "src/idb-file-storage.js~IDBPromisedFileHandle",
+    "generator": false,
+    "async": false,
+    "static": false,
+    "longname": "src/idb-file-storage.js~IDBPromisedFileHandle#ensureLocked",
+    "access": "private",
+    "description": "",
+    "lineNumber": 73,
+    "params": [
+      {
+        "name": "objectPattern",
+        "optional": true,
+        "types": [
+          "{\"invalidMode\": *}"
+        ],
+        "defaultRaw": {},
+        "defaultValue": "{}"
+      }
+    ]
+  },
+  {
+    "__docId__": 12,
+    "kind": "get",
+    "name": "mode",
+    "memberof": "src/idb-file-storage.js~IDBPromisedFileHandle",
+    "generator": false,
+    "async": false,
+    "static": false,
+    "longname": "src/idb-file-storage.js~IDBPromisedFileHandle#mode",
+    "access": null,
+    "description": "Provide access to the mode that has been used to open the {@link IDBPromisedMutableFile}.",
+    "lineNumber": 102,
+    "type": {
+      "nullable": null,
+      "types": [
+        "\"readonly\"",
+        "\"readwrite\"",
+        "\"writeonly\""
+      ],
+      "spread": false,
+      "description": null
+    }
+  },
+  {
+    "__docId__": 13,
+    "kind": "get",
+    "name": "active",
+    "memberof": "src/idb-file-storage.js~IDBPromisedFileHandle",
+    "generator": false,
+    "async": false,
+    "static": false,
+    "longname": "src/idb-file-storage.js~IDBPromisedFileHandle#active",
+    "access": null,
+    "description": "A boolean property that is true if the lock is still active.",
+    "lineNumber": 111,
+    "type": {
+      "nullable": null,
+      "types": [
+        "boolean"
+      ],
+      "spread": false,
+      "description": null
+    }
+  },
+  {
+    "__docId__": 14,
+    "kind": "method",
+    "name": "close",
+    "memberof": "src/idb-file-storage.js~IDBPromisedFileHandle",
+    "generator": false,
+    "async": true,
+    "static": false,
+    "longname": "src/idb-file-storage.js~IDBPromisedFileHandle#close",
+    "access": null,
+    "description": "Close the locked file (and wait for any written data to be flushed if needed).",
+    "lineNumber": 121,
+    "unknown": [
+      {
+        "tagName": "@returns",
+        "tagValue": "{Promise}\n  A promise which is resolved when the close request has been completed"
+      }
+    ],
+    "params": [],
+    "return": {
+      "nullable": null,
+      "types": [
+        "Promise"
+      ],
+      "spread": false,
+      "description": "A promise which is resolved when the close request has been completed"
+    }
+  },
+  {
+    "__docId__": 15,
+    "kind": "member",
+    "name": "closed",
+    "memberof": "src/idb-file-storage.js~IDBPromisedFileHandle",
+    "static": false,
+    "longname": "src/idb-file-storage.js~IDBPromisedFileHandle#closed",
+    "access": null,
+    "description": null,
+    "lineNumber": 134,
+    "undocument": true,
+    "unknown": [
+      {
+        "tagName": "@_undocument",
+        "tagValue": ""
+      }
+    ],
+    "type": {
+      "types": [
+        "boolean"
+      ]
+    }
+  },
+  {
+    "__docId__": 16,
+    "kind": "member",
+    "name": "lockedFile",
+    "memberof": "src/idb-file-storage.js~IDBPromisedFileHandle",
+    "static": false,
+    "longname": "src/idb-file-storage.js~IDBPromisedFileHandle#lockedFile",
+    "access": null,
+    "description": null,
+    "lineNumber": 135,
+    "undocument": true,
+    "unknown": [
+      {
+        "tagName": "@_undocument",
+        "tagValue": ""
+      }
+    ],
+    "type": {
+      "types": [
+        "*"
+      ]
+    }
+  },
+  {
+    "__docId__": 17,
+    "kind": "member",
+    "name": "writeQueue",
+    "memberof": "src/idb-file-storage.js~IDBPromisedFileHandle",
+    "static": false,
+    "longname": "src/idb-file-storage.js~IDBPromisedFileHandle#writeQueue",
+    "access": null,
+    "description": null,
+    "lineNumber": 136,
+    "undocument": true,
+    "unknown": [
+      {
+        "tagName": "@_undocument",
+        "tagValue": ""
+      }
+    ],
+    "type": {
+      "types": [
+        "*"
+      ]
+    }
+  },
+  {
+    "__docId__": 18,
+    "kind": "method",
+    "name": "abort",
+    "memberof": "src/idb-file-storage.js~IDBPromisedFileHandle",
+    "generator": false,
+    "async": true,
+    "static": false,
+    "longname": "src/idb-file-storage.js~IDBPromisedFileHandle#abort",
+    "access": null,
+    "description": "Abort any pending data request and set the instance as aborted.",
+    "lineNumber": 145,
+    "unknown": [
+      {
+        "tagName": "@returns",
+        "tagValue": "{Promise}\n  A promise which is resolved when the abort request has been completed"
+      }
+    ],
+    "params": [],
+    "return": {
+      "nullable": null,
+      "types": [
+        "Promise"
+      ],
+      "spread": false,
+      "description": "A promise which is resolved when the abort request has been completed"
+    }
+  },
+  {
+    "__docId__": 19,
+    "kind": "member",
+    "name": "aborted",
+    "memberof": "src/idb-file-storage.js~IDBPromisedFileHandle",
+    "static": false,
+    "longname": "src/idb-file-storage.js~IDBPromisedFileHandle#aborted",
+    "access": null,
+    "description": null,
+    "lineNumber": 152,
+    "undocument": true,
+    "unknown": [
+      {
+        "tagName": "@_undocument",
+        "tagValue": ""
+      }
+    ],
+    "type": {
+      "types": [
+        "boolean"
+      ]
+    }
+  },
+  {
+    "__docId__": 20,
+    "kind": "member",
+    "name": "lockedFile",
+    "memberof": "src/idb-file-storage.js~IDBPromisedFileHandle",
+    "static": false,
+    "longname": "src/idb-file-storage.js~IDBPromisedFileHandle#lockedFile",
+    "access": null,
+    "description": null,
+    "lineNumber": 153,
+    "undocument": true,
+    "unknown": [
+      {
+        "tagName": "@_undocument",
+        "tagValue": ""
+      }
+    ],
+    "type": {
+      "types": [
+        "*"
+      ]
+    }
+  },
+  {
+    "__docId__": 21,
+    "kind": "member",
+    "name": "writeQueue",
+    "memberof": "src/idb-file-storage.js~IDBPromisedFileHandle",
+    "static": false,
+    "longname": "src/idb-file-storage.js~IDBPromisedFileHandle#writeQueue",
+    "access": null,
+    "description": null,
+    "lineNumber": 154,
+    "undocument": true,
+    "unknown": [
+      {
+        "tagName": "@_undocument",
+        "tagValue": ""
+      }
+    ],
+    "type": {
+      "types": [
+        "*"
+      ]
+    }
+  },
+  {
+    "__docId__": 22,
+    "kind": "method",
+    "name": "getMetadata",
+    "memberof": "src/idb-file-storage.js~IDBPromisedFileHandle",
+    "generator": false,
+    "async": true,
+    "static": false,
+    "longname": "src/idb-file-storage.js~IDBPromisedFileHandle#getMetadata",
+    "access": null,
+    "description": "Get the file metadata (take a look to {@link IDBPromisedFileHandle.Metadata} for more info).",
+    "lineNumber": 163,
+    "unknown": [
+      {
+        "tagName": "@returns",
+        "tagValue": "{Promise<{size: number, lastModified: Date}>}\n  A promise which is resolved when the request has been completed"
+      }
+    ],
+    "params": [],
+    "return": {
+      "nullable": null,
+      "types": [
+        "Promise<{size: number, lastModified: Date}>"
+      ],
+      "spread": false,
+      "description": "A promise which is resolved when the request has been completed"
+    }
+  },
+  {
+    "__docId__": 23,
+    "kind": "method",
+    "name": "readAsText",
+    "memberof": "src/idb-file-storage.js~IDBPromisedFileHandle",
+    "generator": false,
+    "async": true,
+    "static": false,
+    "longname": "src/idb-file-storage.js~IDBPromisedFileHandle#readAsText",
+    "access": null,
+    "description": "Read a given amount of data from the file as Text (optionally starting from the specified\nlocation).",
+    "lineNumber": 180,
+    "unknown": [
+      {
+        "tagName": "@returns",
+        "tagValue": "{Promise<string>}\n  A promise which resolves to the data read, when the request has been completed."
+      }
+    ],
+    "params": [
+      {
+        "nullable": null,
+        "types": [
+          "number"
+        ],
+        "spread": false,
+        "optional": false,
+        "name": "size",
+        "description": "The amount of data to read."
+      },
+      {
+        "nullable": null,
+        "types": [
+          "number"
+        ],
+        "spread": false,
+        "optional": true,
+        "name": "location",
+        "description": "The location where the request should start to read the data."
+      }
+    ],
+    "return": {
+      "nullable": null,
+      "types": [
+        "Promise<string>"
+      ],
+      "spread": false,
+      "description": "A promise which resolves to the data read, when the request has been completed."
+    }
+  },
+  {
+    "__docId__": 24,
+    "kind": "method",
+    "name": "readAsArrayBuffer",
+    "memberof": "src/idb-file-storage.js~IDBPromisedFileHandle",
+    "generator": false,
+    "async": true,
+    "static": false,
+    "longname": "src/idb-file-storage.js~IDBPromisedFileHandle#readAsArrayBuffer",
+    "access": null,
+    "description": "Read a given amount of data from the file as an ArrayBufer (optionally starting from the specified\nlocation).",
+    "lineNumber": 200,
+    "unknown": [
+      {
+        "tagName": "@returns",
+        "tagValue": "{Promise<ArrayBuffer>}\n  A promise which resolves to the data read, when the request has been completed."
+      }
+    ],
+    "params": [
+      {
+        "nullable": null,
+        "types": [
+          "number"
+        ],
+        "spread": false,
+        "optional": false,
+        "name": "size",
+        "description": "The amount of data to read."
+      },
+      {
+        "nullable": null,
+        "types": [
+          "number"
+        ],
+        "spread": false,
+        "optional": true,
+        "name": "location",
+        "description": "The location where the request should start to read the data."
+      }
+    ],
+    "return": {
+      "nullable": null,
+      "types": [
+        "Promise<ArrayBuffer>"
+      ],
+      "spread": false,
+      "description": "A promise which resolves to the data read, when the request has been completed."
+    }
+  },
+  {
+    "__docId__": 25,
+    "kind": "method",
+    "name": "truncate",
+    "memberof": "src/idb-file-storage.js~IDBPromisedFileHandle",
+    "generator": false,
+    "async": true,
+    "static": false,
+    "longname": "src/idb-file-storage.js~IDBPromisedFileHandle#truncate",
+    "access": null,
+    "description": "Truncate the file (optionally at a specified location).",
+    "lineNumber": 217,
+    "unknown": [
+      {
+        "tagName": "@returns",
+        "tagValue": "{Promise<ArrayBuffer>}\n  A promise which is resolved once the request has been completed."
+      }
+    ],
+    "params": [
+      {
+        "nullable": null,
+        "types": [
+          "number"
+        ],
+        "spread": false,
+        "optional": true,
+        "defaultValue": "0",
+        "defaultRaw": 0,
+        "name": "location",
+        "description": "The location where the file should be truncated."
+      }
+    ],
+    "return": {
+      "nullable": null,
+      "types": [
+        "Promise<ArrayBuffer>"
+      ],
+      "spread": false,
+      "description": "A promise which is resolved once the request has been completed."
+    }
+  },
+  {
+    "__docId__": 26,
+    "kind": "method",
+    "name": "append",
+    "memberof": "src/idb-file-storage.js~IDBPromisedFileHandle",
+    "generator": false,
+    "async": true,
+    "static": false,
+    "longname": "src/idb-file-storage.js~IDBPromisedFileHandle#append",
+    "access": null,
+    "description": "Append the passed data to the end of the file.",
+    "lineNumber": 231,
+    "unknown": [
+      {
+        "tagName": "@returns",
+        "tagValue": "{Promise}\n  A promise which is resolved once the request has been completed."
+      }
+    ],
+    "params": [
+      {
+        "nullable": null,
+        "types": [
+          "string",
+          "ArrayBuffer"
+        ],
+        "spread": false,
+        "optional": false,
+        "name": "data",
+        "description": "The data to append to the end of the file."
+      }
+    ],
+    "return": {
+      "nullable": null,
+      "types": [
+        "Promise"
+      ],
+      "spread": false,
+      "description": "A promise which is resolved once the request has been completed."
+    }
+  },
+  {
+    "__docId__": 27,
+    "kind": "method",
+    "name": "write",
+    "memberof": "src/idb-file-storage.js~IDBPromisedFileHandle",
+    "generator": false,
+    "async": true,
+    "static": false,
+    "longname": "src/idb-file-storage.js~IDBPromisedFileHandle#write",
+    "access": null,
+    "description": "Write data into the file (optionally starting from a defined location in the file).",
+    "lineNumber": 247,
+    "unknown": [
+      {
+        "tagName": "@returns",
+        "tagValue": "{Promise<number>}\n  A promise which is resolved to the location where the written data ends."
+      }
+    ],
+    "params": [
+      {
+        "nullable": null,
+        "types": [
+          "string",
+          "ArrayBuffer"
+        ],
+        "spread": false,
+        "optional": false,
+        "name": "data",
+        "description": "The data to write into the file."
+      },
+      {
+        "nullable": null,
+        "types": [
+          "number"
+        ],
+        "spread": false,
+        "optional": false,
+        "name": "location",
+        "description": "The location where the data should be written."
+      }
+    ],
+    "return": {
+      "nullable": null,
+      "types": [
+        "Promise<number>"
+      ],
+      "spread": false,
+      "description": "A promise which is resolved to the location where the written data ends."
+    }
+  },
+  {
+    "__docId__": 28,
+    "kind": "method",
+    "name": "queuedWrite",
+    "memberof": "src/idb-file-storage.js~IDBPromisedFileHandle",
+    "generator": false,
+    "async": false,
+    "static": false,
+    "longname": "src/idb-file-storage.js~IDBPromisedFileHandle#queuedWrite",
+    "access": null,
+    "description": "Queue data to be written into the file (optionally starting from a defined location in the file).",
+    "lineNumber": 274,
+    "unknown": [
+      {
+        "tagName": "@returns",
+        "tagValue": "{Promise<number>}\n  A promise which is resolved once the request has been completed with the location where the\n  file was after the data has been writted."
+      }
+    ],
+    "params": [
+      {
+        "nullable": null,
+        "types": [
+          "string",
+          "ArrayBuffer"
+        ],
+        "spread": false,
+        "optional": false,
+        "name": "data",
+        "description": "The data to write into the file."
+      },
+      {
+        "nullable": null,
+        "types": [
+          "number"
+        ],
+        "spread": false,
+        "optional": false,
+        "name": "location",
+        "description": "The location where the data should be written (when not specified the end of the previous\n  queued write is used)."
+      }
+    ],
+    "return": {
+      "nullable": null,
+      "types": [
+        "Promise<number>"
+      ],
+      "spread": false,
+      "description": "A promise which is resolved once the request has been completed with the location where the\n  file was after the data has been writted."
+    }
+  },
+  {
+    "__docId__": 29,
+    "kind": "member",
+    "name": "writeQueue",
+    "memberof": "src/idb-file-storage.js~IDBPromisedFileHandle",
+    "static": false,
+    "longname": "src/idb-file-storage.js~IDBPromisedFileHandle#writeQueue",
+    "access": null,
+    "description": null,
+    "lineNumber": 284,
+    "undocument": true,
+    "unknown": [
+      {
+        "tagName": "@_undocument",
+        "tagValue": ""
+      }
+    ],
+    "type": {
+      "types": [
+        "*"
+      ]
+    }
+  },
+  {
+    "__docId__": 30,
+    "kind": "method",
+    "name": "waitForQueuedWrites",
+    "memberof": "src/idb-file-storage.js~IDBPromisedFileHandle",
+    "generator": false,
+    "async": true,
+    "static": false,
+    "longname": "src/idb-file-storage.js~IDBPromisedFileHandle#waitForQueuedWrites",
+    "access": null,
+    "description": "Wait that any queued data has been written.",
+    "lineNumber": 295,
+    "unknown": [
+      {
+        "tagName": "@returns",
+        "tagValue": "{Promise<number>}\n  A promise which is resolved once the request has been completed with the location where the\n  file was after the data has been writted."
+      }
+    ],
+    "params": [],
+    "return": {
+      "nullable": null,
+      "types": [
+        "Promise<number>"
+      ],
+      "spread": false,
+      "description": "A promise which is resolved once the request has been completed with the location where the\n  file was after the data has been writted."
+    }
+  },
+  {
+    "__docId__": 31,
+    "kind": "class",
+    "name": "IDBPromisedMutableFile",
+    "memberof": "src/idb-file-storage.js",
+    "static": true,
+    "longname": "src/idb-file-storage.js~IDBPromisedMutableFile",
+    "access": null,
+    "export": true,
+    "importPath": "idb-file-storage/src/idb-file-storage.js",
+    "importStyle": "{IDBPromisedMutableFile}",
+    "description": "Wraps an IDBMutableFile with a nicer Promise-based API.\n\nInstances of this class are created from the\n{@link IDBFileStorage.createMutableFile} method.",
+    "lineNumber": 306,
+    "interface": false
+  },
+  {
+    "__docId__": 32,
+    "kind": "constructor",
+    "name": "constructor",
+    "memberof": "src/idb-file-storage.js~IDBPromisedMutableFile",
+    "generator": false,
+    "async": false,
+    "static": false,
+    "longname": "src/idb-file-storage.js~IDBPromisedMutableFile#constructor",
+    "access": "private",
+    "description": "",
+    "lineNumber": 310,
+    "params": [
+      {
+        "name": "objectPattern",
+        "types": [
+          "{\"filesStorage\": *, \"idb\": *, \"fileName\": *, \"fileType\": *, \"mutableFile\": *}"
+        ],
+        "defaultRaw": {
+          "filesStorage": null,
+          "idb": null,
+          "fileName": null,
+          "fileType": null,
+          "mutableFile": null
+        },
+        "defaultValue": "{\"filesStorage\":null,\"idb\":null,\"fileName\":null,\"fileType\":null,\"mutableFile\":null}"
+      }
+    ]
+  },
+  {
+    "__docId__": 33,
+    "kind": "member",
+    "name": "filesStorage",
+    "memberof": "src/idb-file-storage.js~IDBPromisedMutableFile",
+    "static": false,
+    "longname": "src/idb-file-storage.js~IDBPromisedMutableFile#filesStorage",
+    "access": "private",
+    "description": null,
+    "lineNumber": 315,
+    "type": {
+      "types": [
+        "*"
+      ]
+    }
+  },
+  {
+    "__docId__": 34,
+    "kind": "member",
+    "name": "idb",
+    "memberof": "src/idb-file-storage.js~IDBPromisedMutableFile",
+    "static": false,
+    "longname": "src/idb-file-storage.js~IDBPromisedMutableFile#idb",
+    "access": "private",
+    "description": null,
+    "lineNumber": 317,
+    "type": {
+      "types": [
+        "*"
+      ]
+    }
+  },
+  {
+    "__docId__": 35,
+    "kind": "member",
+    "name": "fileName",
+    "memberof": "src/idb-file-storage.js~IDBPromisedMutableFile",
+    "static": false,
+    "longname": "src/idb-file-storage.js~IDBPromisedMutableFile#fileName",
+    "access": "private",
+    "description": null,
+    "lineNumber": 319,
+    "type": {
+      "types": [
+        "*"
+      ]
+    }
+  },
+  {
+    "__docId__": 36,
+    "kind": "member",
+    "name": "fileType",
+    "memberof": "src/idb-file-storage.js~IDBPromisedMutableFile",
+    "static": false,
+    "longname": "src/idb-file-storage.js~IDBPromisedMutableFile#fileType",
+    "access": "private",
+    "description": null,
+    "lineNumber": 321,
+    "type": {
+      "types": [
+        "*"
+      ]
+    }
+  },
+  {
+    "__docId__": 37,
+    "kind": "member",
+    "name": "mutableFile",
+    "memberof": "src/idb-file-storage.js~IDBPromisedMutableFile",
+    "static": false,
+    "longname": "src/idb-file-storage.js~IDBPromisedMutableFile#mutableFile",
+    "access": "private",
+    "description": null,
+    "lineNumber": 323,
+    "type": {
+      "types": [
+        "*"
+      ]
+    }
+  },
+  {
+    "__docId__": 38,
+    "kind": "method",
+    "name": "reopenFileHandle",
+    "memberof": "src/idb-file-storage.js~IDBPromisedMutableFile",
+    "generator": false,
+    "async": false,
+    "static": false,
+    "longname": "src/idb-file-storage.js~IDBPromisedMutableFile#reopenFileHandle",
+    "access": "private",
+    "description": "",
+    "lineNumber": 329,
+    "params": [
+      {
+        "name": "fileHandle",
+        "types": [
+          "*"
+        ]
+      }
+    ]
+  },
+  {
+    "__docId__": 39,
+    "kind": "method",
+    "name": "open",
+    "memberof": "src/idb-file-storage.js~IDBPromisedMutableFile",
+    "generator": false,
+    "async": false,
+    "static": false,
+    "longname": "src/idb-file-storage.js~IDBPromisedMutableFile#open",
+    "access": null,
+    "description": "Open a mutable file for reading/writing data.",
+    "lineNumber": 344,
+    "unknown": [
+      {
+        "tagName": "@returns",
+        "tagValue": "{IDBPromisedFileHandle}\n  The created IDBPromisedFileHandle instance."
+      }
+    ],
+    "params": [
+      {
+        "nullable": null,
+        "types": [
+          "\"readonly\"",
+          "\"readwrite\"",
+          "\"writeonly\""
+        ],
+        "spread": false,
+        "optional": false,
+        "name": "mode",
+        "description": "The mode of the created IDBPromisedFileHandle instance."
+      }
+    ],
+    "return": {
+      "nullable": null,
+      "types": [
+        "IDBPromisedFileHandle"
+      ],
+      "spread": false,
+      "description": "The created IDBPromisedFileHandle instance."
+    }
+  },
+  {
+    "__docId__": 40,
+    "kind": "method",
+    "name": "getFile",
+    "memberof": "src/idb-file-storage.js~IDBPromisedMutableFile",
+    "generator": false,
+    "async": false,
+    "static": false,
+    "longname": "src/idb-file-storage.js~IDBPromisedMutableFile#getFile",
+    "access": null,
+    "description": "Get a {@link File} instance of this mutable file.",
+    "examples": [
+      "    ...\n    let waitSnapshotStored;\n    await mutableFile.runFileRequestGenerator(function* (lockedFile) {\n      const file = yield lockedFile.mutableFile.getFile();\n      // read the file content or turn it into a persistent object of its own\n      // (e.g. by saving it back into IndexedDB as its snapshot in form of a File object,\n      // or converted into a data url, a string or an array buffer)\n\n      waitSnapshotStored = tmpFiles.put(\"${filename}/last_snapshot\", file);\n    }\n\n    await waitSnapshotStored;\n    let fileSnapshot = await tmpFiles.get(\"${filename}/last_snapshot\");\n    ...\n    // now you can use fileSnapshot even if the mutableFile lock is not active anymore."
+    ],
+    "lineNumber": 385,
+    "unknown": [
+      {
+        "tagName": "@returns",
+        "tagValue": "{Promise<File>}\n  A promise resolved to the File instance.\n\nTo read the actual content of the mutable file as a File object,\nit is often better to use {@link IDBPromisedMutableFile.saveAsFileSnapshot}\nto save a persistent snapshot of the file in the IndexedDB store,\nor reading it directly using the {@link IDBPromisedFileHandle} instance\nreturned by the {@link IDBPromisedMutableFile.open} method.\n\nThe reason is that to be able to read the content of the returned file\na lockfile have be keep the file open, e.d. as in the following example."
+      }
+    ],
+    "params": [],
+    "return": {
+      "nullable": null,
+      "types": [
+        "Promise<File>"
+      ],
+      "spread": false,
+      "description": "A promise resolved to the File instance.\n\nTo read the actual content of the mutable file as a File object,\nit is often better to use {@link IDBPromisedMutableFile.saveAsFileSnapshot}\nto save a persistent snapshot of the file in the IndexedDB store,\nor reading it directly using the {@link IDBPromisedFileHandle} instance\nreturned by the {@link IDBPromisedMutableFile.open} method.\n\nThe reason is that to be able to read the content of the returned file\na lockfile have be keep the file open, e.d. as in the following example."
+    }
+  },
+  {
+    "__docId__": 41,
+    "kind": "method",
+    "name": "persistAsFileSnapshot",
+    "memberof": "src/idb-file-storage.js~IDBPromisedMutableFile",
+    "generator": false,
+    "async": true,
+    "static": false,
+    "longname": "src/idb-file-storage.js~IDBPromisedMutableFile#persistAsFileSnapshot",
+    "access": null,
+    "description": "Persist the content of the mutable file into the files storage\nas a File, using the specified snapshot name and return the persisted File instance.",
+    "examples": [
+      "\n     const file = await mutableFile.persistAsFileSnapshot(`${filename}/last_snapshot`);\n     const blobURL = URL.createObjectURL(file);\n     ...\n     // The blob URL is still valid even if the mutableFile is not active anymore."
+    ],
+    "lineNumber": 403,
+    "unknown": [
+      {
+        "tagName": "@returns",
+        "tagValue": "{Promise<File>}\n  A promise resolved to the File instance."
+      }
+    ],
+    "params": [
+      {
+        "name": "snapshotName",
+        "types": [
+          "*"
+        ]
+      }
+    ],
+    "return": {
+      "nullable": null,
+      "types": [
+        "Promise<File>"
+      ],
+      "spread": false,
+      "description": "A promise resolved to the File instance."
+    }
+  },
+  {
+    "__docId__": 42,
+    "kind": "method",
+    "name": "persist",
+    "memberof": "src/idb-file-storage.js~IDBPromisedMutableFile",
+    "generator": false,
+    "async": false,
+    "static": false,
+    "longname": "src/idb-file-storage.js~IDBPromisedMutableFile#persist",
+    "access": null,
+    "description": "Persist the this mutable file into its related IDBFileStorage.",
+    "lineNumber": 425,
+    "unknown": [
+      {
+        "tagName": "@returns",
+        "tagValue": "{Promise}\n  A promise resolved on the mutable file has been persisted into IndexedDB."
+      }
+    ],
+    "params": [],
+    "return": {
+      "nullable": null,
+      "types": [
+        "Promise"
+      ],
+      "spread": false,
+      "description": "A promise resolved on the mutable file has been persisted into IndexedDB."
+    }
+  },
+  {
+    "__docId__": 43,
+    "kind": "method",
+    "name": "runFileRequestGenerator",
+    "memberof": "src/idb-file-storage.js~IDBPromisedMutableFile",
+    "generator": false,
+    "async": true,
+    "static": false,
+    "longname": "src/idb-file-storage.js~IDBPromisedMutableFile#runFileRequestGenerator",
+    "access": null,
+    "description": "Run a generator function which can run a sequence of FileRequests\nwithout the lockfile to become inactive.\n\nThis method should be rarely needed, mostly to optimize a sequence of\nfile operations without the file to be closed and automatically re-opened\nbetween two file requests.",
+    "examples": [
+      "  (async function () {\n     const tmpFiles = await IDBFiles.getFileStorage({name: \"tmpFiles\"});\n     const mutableFile = await tmpFiles.createMutableFile(\"test-mutable-file.txt\");\n\n     let allFileData;\n\n     function* fileOperations(lockedFile) {\n       yield lockedFile.write(\"some data\");\n       yield lockedFile.write(\"more data\");\n       const metadata = yield lockedFile.getMetadata();\n\n       lockedFile.location = 0;\n       allFileData = yield lockedFile.readAsText(metadata.size);\n     }\n\n     await mutableFile.runFileRequestGenerator(fileOperations, \"readwrite\");\n\n     console.log(\"File Data\", allFileData);\n  })();"
+    ],
+    "lineNumber": 461,
+    "params": [
+      {
+        "nullable": null,
+        "types": [
+          "function* (lockedFile) {...}"
+        ],
+        "spread": false,
+        "optional": false,
+        "name": "generatorFunction",
+        "description": ""
+      },
+      {
+        "nullable": null,
+        "types": [
+          "\"readonly\"",
+          "\"readwrite\"",
+          "\"writeonly\""
+        ],
+        "spread": false,
+        "optional": false,
+        "name": "mode",
+        "description": ""
+      }
+    ]
+  },
+  {
+    "__docId__": 44,
+    "kind": "class",
+    "name": "IDBFileStorage",
+    "memberof": "src/idb-file-storage.js",
+    "static": true,
+    "longname": "src/idb-file-storage.js~IDBFileStorage",
+    "access": null,
+    "export": true,
+    "importPath": "idb-file-storage/src/idb-file-storage.js",
+    "importStyle": "{IDBFileStorage}",
+    "description": "Provides a Promise-based API to store files into an IndexedDB.\n\nInstances of this class are created using the exported\n{@link getFileStorage} function.",
+    "lineNumber": 505,
+    "interface": false
+  },
+  {
+    "__docId__": 45,
+    "kind": "constructor",
+    "name": "constructor",
+    "memberof": "src/idb-file-storage.js~IDBFileStorage",
+    "generator": false,
+    "async": false,
+    "static": false,
+    "longname": "src/idb-file-storage.js~IDBFileStorage#constructor",
+    "access": "private",
+    "description": "",
+    "lineNumber": 509,
+    "params": [
+      {
+        "name": "objectPattern",
+        "optional": true,
+        "types": [
+          "{\"name\": *, \"persistent\": *}"
+        ],
+        "defaultRaw": {},
+        "defaultValue": "{}"
+      }
+    ]
+  },
+  {
+    "__docId__": 46,
+    "kind": "member",
+    "name": "name",
+    "memberof": "src/idb-file-storage.js~IDBFileStorage",
+    "static": false,
+    "longname": "src/idb-file-storage.js~IDBFileStorage#name",
+    "access": "private",
+    "description": null,
+    "lineNumber": 514,
+    "type": {
+      "types": [
+        "*"
+      ]
+    }
+  },
+  {
+    "__docId__": 47,
+    "kind": "member",
+    "name": "persistent",
+    "memberof": "src/idb-file-storage.js~IDBFileStorage",
+    "static": false,
+    "longname": "src/idb-file-storage.js~IDBFileStorage#persistent",
+    "access": "private",
+    "description": null,
+    "lineNumber": 516,
+    "type": {
+      "types": [
+        "*"
+      ]
+    }
+  },
+  {
+    "__docId__": 48,
+    "kind": "member",
+    "name": "indexedDBName",
+    "memberof": "src/idb-file-storage.js~IDBFileStorage",
+    "static": false,
+    "longname": "src/idb-file-storage.js~IDBFileStorage#indexedDBName",
+    "access": "private",
+    "description": null,
+    "lineNumber": 518,
+    "type": {
+      "types": [
+        "string"
+      ]
+    }
+  },
+  {
+    "__docId__": 49,
+    "kind": "member",
+    "name": "objectStorageName",
+    "memberof": "src/idb-file-storage.js~IDBFileStorage",
+    "static": false,
+    "longname": "src/idb-file-storage.js~IDBFileStorage#objectStorageName",
+    "access": "private",
+    "description": null,
+    "lineNumber": 520,
+    "type": {
+      "types": [
+        "string"
+      ]
+    }
+  },
+  {
+    "__docId__": 50,
+    "kind": "member",
+    "name": "initializedPromise",
+    "memberof": "src/idb-file-storage.js~IDBFileStorage",
+    "static": false,
+    "longname": "src/idb-file-storage.js~IDBFileStorage#initializedPromise",
+    "access": "private",
+    "description": null,
+    "lineNumber": 522,
+    "type": {
+      "types": [
+        "*"
+      ]
+    }
+  },
+  {
+    "__docId__": 51,
+    "kind": "member",
+    "name": "version",
+    "memberof": "src/idb-file-storage.js~IDBFileStorage",
+    "static": false,
+    "longname": "src/idb-file-storage.js~IDBFileStorage#version",
+    "access": "private",
+    "description": null,
+    "lineNumber": 526,
+    "type": {
+      "types": [
+        "number"
+      ]
+    }
+  },
+  {
+    "__docId__": 52,
+    "kind": "method",
+    "name": "initializedDB",
+    "memberof": "src/idb-file-storage.js~IDBFileStorage",
+    "generator": false,
+    "async": false,
+    "static": false,
+    "longname": "src/idb-file-storage.js~IDBFileStorage#initializedDB",
+    "access": "private",
+    "description": "",
+    "lineNumber": 532,
+    "params": [],
+    "return": {
+      "types": [
+        "*"
+      ]
+    }
+  },
+  {
+    "__docId__": 53,
+    "kind": "member",
+    "name": "initializedPromise",
+    "memberof": "src/idb-file-storage.js~IDBFileStorage",
+    "static": false,
+    "longname": "src/idb-file-storage.js~IDBFileStorage#initializedPromise",
+    "access": null,
+    "description": null,
+    "lineNumber": 537,
+    "undocument": true,
+    "unknown": [
+      {
+        "tagName": "@_undocument",
+        "tagValue": ""
+      }
+    ],
+    "type": {
+      "types": [
+        "*"
+      ]
+    }
+  },
+  {
+    "__docId__": 54,
+    "kind": "member",
+    "name": "version",
+    "memberof": "src/idb-file-storage.js~IDBFileStorage",
+    "static": false,
+    "longname": "src/idb-file-storage.js~IDBFileStorage#version",
+    "access": null,
+    "description": null,
+    "lineNumber": 539,
+    "undocument": true,
+    "unknown": [
+      {
+        "tagName": "@_undocument",
+        "tagValue": ""
+      }
+    ],
+    "type": {
+      "types": [
+        "{\"version\": *, \"storage\": string}"
+      ]
+    }
+  },
+  {
+    "__docId__": 55,
+    "kind": "method",
+    "name": "getObjectStoreTransaction",
+    "memberof": "src/idb-file-storage.js~IDBFileStorage",
+    "generator": false,
+    "async": false,
+    "static": false,
+    "longname": "src/idb-file-storage.js~IDBFileStorage#getObjectStoreTransaction",
+    "access": "private",
+    "description": "",
+    "lineNumber": 559,
+    "params": [
+      {
+        "name": "objectPattern",
+        "optional": true,
+        "types": [
+          "{\"idb\": *, \"mode\": *}"
+        ],
+        "defaultRaw": {},
+        "defaultValue": "{}"
+      }
+    ],
+    "return": {
+      "types": [
+        "*"
+      ]
+    }
+  },
+  {
+    "__docId__": 56,
+    "kind": "method",
+    "name": "createMutableFile",
+    "memberof": "src/idb-file-storage.js~IDBFileStorage",
+    "generator": false,
+    "async": true,
+    "static": false,
+    "longname": "src/idb-file-storage.js~IDBFileStorage#createMutableFile",
+    "access": null,
+    "description": "Create a new IDBPromisedMutableFile instance (where the IDBMutableFile is supported)",
+    "lineNumber": 575,
+    "unknown": [
+      {
+        "tagName": "@returns",
+        "tagValue": "{IDBPromisedMutableFile}\n  The newly created {@link IDBPromisedMutableFile} instance."
+      }
+    ],
+    "params": [
+      {
+        "nullable": null,
+        "types": [
+          "string"
+        ],
+        "spread": false,
+        "optional": false,
+        "name": "fileName",
+        "description": "The fileName associated to the new IDBPromisedMutableFile instance."
+      },
+      {
+        "nullable": null,
+        "types": [
+          "string"
+        ],
+        "spread": false,
+        "optional": true,
+        "defaultValue": "\"text\"",
+        "defaultRaw": "text",
+        "name": "fileType",
+        "description": "The mime type associated to the file."
+      }
+    ],
+    "return": {
+      "nullable": null,
+      "types": [
+        "IDBPromisedMutableFile"
+      ],
+      "spread": false,
+      "description": "The newly created {@link IDBPromisedMutableFile} instance."
+    }
+  },
+  {
+    "__docId__": 57,
+    "kind": "method",
+    "name": "put",
+    "memberof": "src/idb-file-storage.js~IDBFileStorage",
+    "generator": false,
+    "async": true,
+    "static": false,
+    "longname": "src/idb-file-storage.js~IDBFileStorage#put",
+    "access": null,
+    "description": "Put a file object into the IDBFileStorage, it overwrites an existent file saved with the\nfileName if any.",
+    "lineNumber": 600,
+    "unknown": [
+      {
+        "tagName": "@returns",
+        "tagValue": "{Promise}\n  A promise resolved when the request has been completed."
+      }
+    ],
+    "params": [
+      {
+        "nullable": null,
+        "types": [
+          "string"
+        ],
+        "spread": false,
+        "optional": false,
+        "name": "fileName",
+        "description": "The key associated to the file in the IDBFileStorage."
+      },
+      {
+        "nullable": null,
+        "types": [
+          "Blob",
+          "File",
+          "IDBPromisedMutableFile",
+          "IDBMutableFile"
+        ],
+        "spread": false,
+        "optional": false,
+        "name": "file",
+        "description": "The file to be persisted."
+      }
+    ],
+    "return": {
+      "nullable": null,
+      "types": [
+        "Promise"
+      ],
+      "spread": false,
+      "description": "A promise resolved when the request has been completed."
+    }
+  },
+  {
+    "__docId__": 58,
+    "kind": "method",
+    "name": "remove",
+    "memberof": "src/idb-file-storage.js~IDBFileStorage",
+    "generator": false,
+    "async": true,
+    "static": false,
+    "longname": "src/idb-file-storage.js~IDBFileStorage#remove",
+    "access": null,
+    "description": "Remove a file object from the IDBFileStorage.",
+    "lineNumber": 629,
+    "unknown": [
+      {
+        "tagName": "@returns",
+        "tagValue": "{Promise}\n  A promise resolved when the request has been completed."
+      }
+    ],
+    "params": [
+      {
+        "nullable": null,
+        "types": [
+          "string"
+        ],
+        "spread": false,
+        "optional": false,
+        "name": "fileName",
+        "description": "The fileName (the associated IndexedDB key) to remove from the IDBFileStorage."
+      }
+    ],
+    "return": {
+      "nullable": null,
+      "types": [
+        "Promise"
+      ],
+      "spread": false,
+      "description": "A promise resolved when the request has been completed."
+    }
+  },
+  {
+    "__docId__": 59,
+    "kind": "method",
+    "name": "list",
+    "memberof": "src/idb-file-storage.js~IDBFileStorage",
+    "generator": false,
+    "async": true,
+    "static": false,
+    "longname": "src/idb-file-storage.js~IDBFileStorage#list",
+    "access": null,
+    "description": "List the names of the files stored in the IDBFileStorage.\n\n(If any filtering options has been specified, only the file names that match\nall the filters are included in the result).",
+    "lineNumber": 651,
+    "unknown": [
+      {
+        "tagName": "@returns",
+        "tagValue": "{Promise<string[]>}\n  A promise resolved to the array of the filenames that has been found."
+      }
+    ],
+    "params": [
+      {
+        "nullable": null,
+        "types": [
+          "IDBFileStorage.ListFilteringOptions"
+        ],
+        "spread": false,
+        "optional": false,
+        "name": "options",
+        "description": "The optional filters to apply while listing the stored file names."
+      }
+    ],
+    "return": {
+      "nullable": null,
+      "types": [
+        "Promise<string[]>"
+      ],
+      "spread": false,
+      "description": "A promise resolved to the array of the filenames that has been found."
+    }
+  },
+  {
+    "__docId__": 60,
+    "kind": "method",
+    "name": "count",
+    "memberof": "src/idb-file-storage.js~IDBFileStorage",
+    "generator": false,
+    "async": true,
+    "static": false,
+    "longname": "src/idb-file-storage.js~IDBFileStorage#count",
+    "access": null,
+    "description": "Count the number of files stored in the IDBFileStorage.\n\n(If any filtering options has been specified, only the file names that match\nall the filters are included in the final count).",
+    "lineNumber": 697,
+    "unknown": [
+      {
+        "tagName": "@returns",
+        "tagValue": "{Promise<number>}\n  A promise resolved to the number of files that has been found."
+      }
+    ],
+    "params": [
+      {
+        "nullable": null,
+        "types": [
+          "IDBFileStorage.ListFilteringOptions"
+        ],
+        "spread": false,
+        "optional": false,
+        "name": "options",
+        "description": "The optional filters to apply while listing the stored file names."
+      }
+    ],
+    "return": {
+      "nullable": null,
+      "types": [
+        "Promise<number>"
+      ],
+      "spread": false,
+      "description": "A promise resolved to the number of files that has been found."
+    }
+  },
+  {
+    "__docId__": 61,
+    "kind": "method",
+    "name": "get",
+    "memberof": "src/idb-file-storage.js~IDBFileStorage",
+    "generator": false,
+    "async": true,
+    "static": false,
+    "longname": "src/idb-file-storage.js~IDBFileStorage#get",
+    "access": null,
+    "description": "Retrieve a file stored in the IDBFileStorage by key.",
+    "lineNumber": 717,
+    "unknown": [
+      {
+        "tagName": "@returns",
+        "tagValue": "{Promise<Blob|File|IDBPromisedMutableFile>}\n  A promise resolved once the file stored in the IDBFileStorage has been retrieved."
+      }
+    ],
+    "params": [
+      {
+        "nullable": null,
+        "types": [
+          "string"
+        ],
+        "spread": false,
+        "optional": false,
+        "name": "fileName",
+        "description": "The key to use to retrieve the file from the IDBFileStorage."
+      }
+    ],
+    "return": {
+      "nullable": null,
+      "types": [
+        "Promise<Blob|File|IDBPromisedMutableFile>"
+      ],
+      "spread": false,
+      "description": "A promise resolved once the file stored in the IDBFileStorage has been retrieved."
+    }
+  },
+  {
+    "__docId__": 62,
+    "kind": "method",
+    "name": "clear",
+    "memberof": "src/idb-file-storage.js~IDBFileStorage",
+    "generator": false,
+    "async": true,
+    "static": false,
+    "longname": "src/idb-file-storage.js~IDBFileStorage#clear",
+    "access": null,
+    "description": "Remove all the file objects stored in the IDBFileStorage.",
+    "lineNumber": 741,
+    "unknown": [
+      {
+        "tagName": "@returns",
+        "tagValue": "{Promise}\n  A promise resolved once the IDBFileStorage has been cleared."
+      }
+    ],
+    "params": [],
+    "return": {
+      "nullable": null,
+      "types": [
+        "Promise"
+      ],
+      "spread": false,
+      "description": "A promise resolved once the IDBFileStorage has been cleared."
+    }
+  },
+  {
+    "__docId__": 63,
+    "kind": "function",
+    "name": "getFileStorage",
+    "memberof": "src/idb-file-storage.js",
+    "generator": false,
+    "async": true,
+    "static": true,
+    "longname": "src/idb-file-storage.js~getFileStorage",
+    "access": null,
+    "export": true,
+    "importPath": "idb-file-storage/src/idb-file-storage.js",
+    "importStyle": "{getFileStorage}",
+    "description": "Retrieve an IDBFileStorage instance by name (and it creates the indexedDB if it doesn't\nexist yet).",
+    "lineNumber": 761,
+    "unknown": [
+      {
+        "tagName": "@returns",
+        "tagValue": "{IDBFileStorage}\n  The IDBFileStorage instance with the given name."
+      }
+    ],
+    "params": [
+      {
+        "nullable": null,
+        "types": [
+          "Object"
+        ],
+        "spread": false,
+        "optional": true,
+        "name": "param",
+        "description": ""
+      },
+      {
+        "nullable": null,
+        "types": [
+          "string"
+        ],
+        "spread": false,
+        "optional": true,
+        "defaultValue": "\"default\"",
+        "defaultRaw": "default",
+        "name": "param.name",
+        "description": "The name associated to the IDB File Storage."
+      },
+      {
+        "nullable": null,
+        "types": [
+          "boolean"
+        ],
+        "spread": false,
+        "optional": true,
+        "name": "param.persistent",
+        "description": "Optionally enable persistent storage mode (not enabled by default)."
+      }
+    ],
+    "return": {
+      "nullable": null,
+      "types": [
+        "IDBFileStorage"
+      ],
+      "spread": false,
+      "description": "The IDBFileStorage instance with the given name."
+    }
+  },
+  {
+    "__docId__": 64,
+    "kind": "external",
+    "name": "Blob",
+    "externalLink": "https://developer.mozilla.org/en-US/docs/Web/API/Blob",
+    "memberof": "src/idb-file-storage.js",
+    "static": true,
+    "longname": "src/idb-file-storage.js~Blob",
+    "access": null,
+    "description": ""
+  },
+  {
+    "__docId__": 65,
+    "kind": "external",
+    "name": "DOMRequest",
+    "externalLink": "https://developer.mozilla.org/en/docs/Web/API/DOMRequest",
+    "memberof": "src/idb-file-storage.js",
+    "static": true,
+    "longname": "src/idb-file-storage.js~DOMRequest",
+    "access": null,
+    "description": ""
+  },
+  {
+    "__docId__": 66,
+    "kind": "external",
+    "name": "File",
+    "externalLink": "https://developer.mozilla.org/en-US/docs/Web/API/File",
+    "memberof": "src/idb-file-storage.js",
+    "static": true,
+    "longname": "src/idb-file-storage.js~File",
+    "access": null,
+    "description": ""
+  },
+  {
+    "__docId__": 67,
+    "kind": "external",
+    "name": "IDBMutableFile",
+    "externalLink": "https://developer.mozilla.org/en-US/docs/Web/API/IDBMutableFile",
+    "memberof": "src/idb-file-storage.js",
+    "static": true,
+    "longname": "src/idb-file-storage.js~IDBMutableFile",
+    "access": null,
+    "description": ""
+  },
+  {
+    "__docId__": 68,
+    "kind": "external",
+    "name": "IDBRequest",
+    "externalLink": "https://developer.mozilla.org/en-US/docs/Web/API/IDBRequest",
+    "memberof": "src/idb-file-storage.js",
+    "static": true,
+    "longname": "src/idb-file-storage.js~IDBRequest",
+    "access": null,
+    "description": ""
+  },
+  {
+    "__docId__": 70,
+    "kind": "external",
+    "name": "Infinity",
+    "externalLink": "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Infinity",
+    "memberof": "BuiltinExternal/ECMAScriptExternal.js",
+    "static": true,
+    "longname": "BuiltinExternal/ECMAScriptExternal.js~Infinity",
+    "access": null,
+    "description": "",
+    "builtinExternal": true
+  },
+  {
+    "__docId__": 71,
+    "kind": "external",
+    "name": "NaN",
+    "externalLink": "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/NaN",
+    "memberof": "BuiltinExternal/ECMAScriptExternal.js",
+    "static": true,
+    "longname": "BuiltinExternal/ECMAScriptExternal.js~NaN",
+    "access": null,
+    "description": "",
+    "builtinExternal": true
+  },
+  {
+    "__docId__": 72,
+    "kind": "external",
+    "name": "undefined",
+    "externalLink": "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/undefined",
+    "memberof": "BuiltinExternal/ECMAScriptExternal.js",
+    "static": true,
+    "longname": "BuiltinExternal/ECMAScriptExternal.js~undefined",
+    "access": null,
+    "description": "",
+    "builtinExternal": true
+  },
+  {
+    "__docId__": 73,
+    "kind": "external",
+    "name": "null",
+    "externalLink": "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/null",
+    "memberof": "BuiltinExternal/ECMAScriptExternal.js",
+    "static": true,
+    "longname": "BuiltinExternal/ECMAScriptExternal.js~null",
+    "access": null,
+    "description": "",
+    "builtinExternal": true
+  },
+  {
+    "__docId__": 74,
+    "kind": "external",
+    "name": "Object",
+    "externalLink": "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object",
+    "memberof": "BuiltinExternal/ECMAScriptExternal.js",
+    "static": true,
+    "longname": "BuiltinExternal/ECMAScriptExternal.js~Object",
+    "access": null,
+    "description": "",
+    "builtinExternal": true
+  },
+  {
+    "__docId__": 75,
+    "kind": "external",
+    "name": "object",
+    "externalLink": "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object",
+    "memberof": "BuiltinExternal/ECMAScriptExternal.js",
+    "static": true,
+    "longname": "BuiltinExternal/ECMAScriptExternal.js~object",
+    "access": null,
+    "description": "",
+    "builtinExternal": true
+  },
+  {
+    "__docId__": 76,
+    "kind": "external",
+    "name": "Function",
+    "externalLink": "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Function",
+    "memberof": "BuiltinExternal/ECMAScriptExternal.js",
+    "static": true,
+    "longname": "BuiltinExternal/ECMAScriptExternal.js~Function",
+    "access": null,
+    "description": "",
+    "builtinExternal": true
+  },
+  {
+    "__docId__": 77,
+    "kind": "external",
+    "name": "function",
+    "externalLink": "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Function",
+    "memberof": "BuiltinExternal/ECMAScriptExternal.js",
+    "static": true,
+    "longname": "BuiltinExternal/ECMAScriptExternal.js~function",
+    "access": null,
+    "description": "",
+    "builtinExternal": true
+  },
+  {
+    "__docId__": 78,
+    "kind": "external",
+    "name": "Boolean",
+    "externalLink": "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Boolean",
+    "memberof": "BuiltinExternal/ECMAScriptExternal.js",
+    "static": true,
+    "longname": "BuiltinExternal/ECMAScriptExternal.js~Boolean",
+    "access": null,
+    "description": "",
+    "builtinExternal": true
+  },
+  {
+    "__docId__": 79,
+    "kind": "external",
+    "name": "boolean",
+    "externalLink": "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Boolean",
+    "memberof": "BuiltinExternal/ECMAScriptExternal.js",
+    "static": true,
+    "longname": "BuiltinExternal/ECMAScriptExternal.js~boolean",
+    "access": null,
+    "description": "",
+    "builtinExternal": true
+  },
+  {
+    "__docId__": 80,
+    "kind": "external",
+    "name": "Symbol",
+    "externalLink": "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Symbol",
+    "memberof": "BuiltinExternal/ECMAScriptExternal.js",
+    "static": true,
+    "longname": "BuiltinExternal/ECMAScriptExternal.js~Symbol",
+    "access": null,
+    "description": "",
+    "builtinExternal": true
+  },
+  {
+    "__docId__": 81,
+    "kind": "external",
+    "name": "Error",
+    "externalLink": "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Error",
+    "memberof": "BuiltinExternal/ECMAScriptExternal.js",
+    "static": true,
+    "longname": "BuiltinExternal/ECMAScriptExternal.js~Error",
+    "access": null,
+    "description": "",
+    "builtinExternal": true
+  },
+  {
+    "__docId__": 82,
+    "kind": "external",
+    "name": "EvalError",
+    "externalLink": "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/EvalError",
+    "memberof": "BuiltinExternal/ECMAScriptExternal.js",
+    "static": true,
+    "longname": "BuiltinExternal/ECMAScriptExternal.js~EvalError",
+    "access": null,
+    "description": "",
+    "builtinExternal": true
+  },
+  {
+    "__docId__": 83,
+    "kind": "external",
+    "name": "InternalError",
+    "externalLink": "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/InternalError",
+    "memberof": "BuiltinExternal/ECMAScriptExternal.js",
+    "static": true,
+    "longname": "BuiltinExternal/ECMAScriptExternal.js~InternalError",
+    "access": null,
+    "description": "",
+    "builtinExternal": true
+  },
+  {
+    "__docId__": 84,
+    "kind": "external",
+    "name": "RangeError",
+    "externalLink": "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/RangeError",
+    "memberof": "BuiltinExternal/ECMAScriptExternal.js",
+    "static": true,
+    "longname": "BuiltinExternal/ECMAScriptExternal.js~RangeError",
+    "access": null,
+    "description": "",
+    "builtinExternal": true
+  },
+  {
+    "__docId__": 85,
+    "kind": "external",
+    "name": "ReferenceError",
+    "externalLink": "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/ReferenceError",
+    "memberof": "BuiltinExternal/ECMAScriptExternal.js",
+    "static": true,
+    "longname": "BuiltinExternal/ECMAScriptExternal.js~ReferenceError",
+    "access": null,
+    "description": "",
+    "builtinExternal": true
+  },
+  {
+    "__docId__": 86,
+    "kind": "external",
+    "name": "SyntaxError",
+    "externalLink": "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/SyntaxError",
+    "memberof": "BuiltinExternal/ECMAScriptExternal.js",
+    "static": true,
+    "longname": "BuiltinExternal/ECMAScriptExternal.js~SyntaxError",
+    "access": null,
+    "description": "",
+    "builtinExternal": true
+  },
+  {
+    "__docId__": 87,
+    "kind": "external",
+    "name": "TypeError",
+    "externalLink": "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/TypeError",
+    "memberof": "BuiltinExternal/ECMAScriptExternal.js",
+    "static": true,
+    "longname": "BuiltinExternal/ECMAScriptExternal.js~TypeError",
+    "access": null,
+    "description": "",
+    "builtinExternal": true
+  },
+  {
+    "__docId__": 88,
+    "kind": "external",
+    "name": "URIError",
+    "externalLink": "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/URIError",
+    "memberof": "BuiltinExternal/ECMAScriptExternal.js",
+    "static": true,
+    "longname": "BuiltinExternal/ECMAScriptExternal.js~URIError",
+    "access": null,
+    "description": "",
+    "builtinExternal": true
+  },
+  {
+    "__docId__": 89,
+    "kind": "external",
+    "name": "Number",
+    "externalLink": "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Number",
+    "memberof": "BuiltinExternal/ECMAScriptExternal.js",
+    "static": true,
+    "longname": "BuiltinExternal/ECMAScriptExternal.js~Number",
+    "access": null,
+    "description": "",
+    "builtinExternal": true
+  },
+  {
+    "__docId__": 90,
+    "kind": "external",
+    "name": "number",
+    "externalLink": "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Number",
+    "memberof": "BuiltinExternal/ECMAScriptExternal.js",
+    "static": true,
+    "longname": "BuiltinExternal/ECMAScriptExternal.js~number",
+    "access": null,
+    "description": "",
+    "builtinExternal": true
+  },
+  {
+    "__docId__": 91,
+    "kind": "external",
+    "name": "Date",
+    "externalLink": "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Date",
+    "memberof": "BuiltinExternal/ECMAScriptExternal.js",
+    "static": true,
+    "longname": "BuiltinExternal/ECMAScriptExternal.js~Date",
+    "access": null,
+    "description": "",
+    "builtinExternal": true
+  },
+  {
+    "__docId__": 92,
+    "kind": "external",
+    "name": "String",
+    "externalLink": "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/String",
+    "memberof": "BuiltinExternal/ECMAScriptExternal.js",
+    "static": true,
+    "longname": "BuiltinExternal/ECMAScriptExternal.js~String",
+    "access": null,
+    "description": "",
+    "builtinExternal": true
+  },
+  {
+    "__docId__": 93,
+    "kind": "external",
+    "name": "string",
+    "externalLink": "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/String",
+    "memberof": "BuiltinExternal/ECMAScriptExternal.js",
+    "static": true,
+    "longname": "BuiltinExternal/ECMAScriptExternal.js~string",
+    "access": null,
+    "description": "",
+    "builtinExternal": true
+  },
+  {
+    "__docId__": 94,
+    "kind": "external",
+    "name": "RegExp",
+    "externalLink": "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/RegExp",
+    "memberof": "BuiltinExternal/ECMAScriptExternal.js",
+    "static": true,
+    "longname": "BuiltinExternal/ECMAScriptExternal.js~RegExp",
+    "access": null,
+    "description": "",
+    "builtinExternal": true
+  },
+  {
+    "__docId__": 95,
+    "kind": "external",
+    "name": "Array",
+    "externalLink": "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array",
+    "memberof": "BuiltinExternal/ECMAScriptExternal.js",
+    "static": true,
+    "longname": "BuiltinExternal/ECMAScriptExternal.js~Array",
+    "access": null,
+    "description": "",
+    "builtinExternal": true
+  },
+  {
+    "__docId__": 96,
+    "kind": "external",
+    "name": "Int8Array",
+    "externalLink": "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Int8Array",
+    "memberof": "BuiltinExternal/ECMAScriptExternal.js",
+    "static": true,
+    "longname": "BuiltinExternal/ECMAScriptExternal.js~Int8Array",
+    "access": null,
+    "description": "",
+    "builtinExternal": true
+  },
+  {
+    "__docId__": 97,
+    "kind": "external",
+    "name": "Uint8Array",
+    "externalLink": "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Uint8Array",
+    "memberof": "BuiltinExternal/ECMAScriptExternal.js",
+    "static": true,
+    "longname": "BuiltinExternal/ECMAScriptExternal.js~Uint8Array",
+    "access": null,
+    "description": "",
+    "builtinExternal": true
+  },
+  {
+    "__docId__": 98,
+    "kind": "external",
+    "name": "Uint8ClampedArray",
+    "externalLink": "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Uint8ClampedArray",
+    "memberof": "BuiltinExternal/ECMAScriptExternal.js",
+    "static": true,
+    "longname": "BuiltinExternal/ECMAScriptExternal.js~Uint8ClampedArray",
+    "access": null,
+    "description": "",
+    "builtinExternal": true
+  },
+  {
+    "__docId__": 99,
+    "kind": "external",
+    "name": "Int16Array",
+    "externalLink": "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Int16Array",
+    "memberof": "BuiltinExternal/ECMAScriptExternal.js",
+    "static": true,
+    "longname": "BuiltinExternal/ECMAScriptExternal.js~Int16Array",
+    "access": null,
+    "description": "",
+    "builtinExternal": true
+  },
+  {
+    "__docId__": 100,
+    "kind": "external",
+    "name": "Uint16Array",
+    "externalLink": "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Uint16Array",
+    "memberof": "BuiltinExternal/ECMAScriptExternal.js",
+    "static": true,
+    "longname": "BuiltinExternal/ECMAScriptExternal.js~Uint16Array",
+    "access": null,
+    "description": "",
+    "builtinExternal": true
+  },
+  {
+    "__docId__": 101,
+    "kind": "external",
+    "name": "Int32Array",
+    "externalLink": "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Int32Array",
+    "memberof": "BuiltinExternal/ECMAScriptExternal.js",
+    "static": true,
+    "longname": "BuiltinExternal/ECMAScriptExternal.js~Int32Array",
+    "access": null,
+    "description": "",
+    "builtinExternal": true
+  },
+  {
+    "__docId__": 102,
+    "kind": "external",
+    "name": "Uint32Array",
+    "externalLink": "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Uint32Array",
+    "memberof": "BuiltinExternal/ECMAScriptExternal.js",
+    "static": true,
+    "longname": "BuiltinExternal/ECMAScriptExternal.js~Uint32Array",
+    "access": null,
+    "description": "",
+    "builtinExternal": true
+  },
+  {
+    "__docId__": 103,
+    "kind": "external",
+    "name": "Float32Array",
+    "externalLink": "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Float32Array",
+    "memberof": "BuiltinExternal/ECMAScriptExternal.js",
+    "static": true,
+    "longname": "BuiltinExternal/ECMAScriptExternal.js~Float32Array",
+    "access": null,
+    "description": "",
+    "builtinExternal": true
+  },
+  {
+    "__docId__": 104,
+    "kind": "external",
+    "name": "Float64Array",
+    "externalLink": "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Float64Array",
+    "memberof": "BuiltinExternal/ECMAScriptExternal.js",
+    "static": true,
+    "longname": "BuiltinExternal/ECMAScriptExternal.js~Float64Array",
+    "access": null,
+    "description": "",
+    "builtinExternal": true
+  },
+  {
+    "__docId__": 105,
+    "kind": "external",
+    "name": "Map",
+    "externalLink": "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Map",
+    "memberof": "BuiltinExternal/ECMAScriptExternal.js",
+    "static": true,
+    "longname": "BuiltinExternal/ECMAScriptExternal.js~Map",
+    "access": null,
+    "description": "",
+    "builtinExternal": true
+  },
+  {
+    "__docId__": 106,
+    "kind": "external",
+    "name": "Set",
+    "externalLink": "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Set",
+    "memberof": "BuiltinExternal/ECMAScriptExternal.js",
+    "static": true,
+    "longname": "BuiltinExternal/ECMAScriptExternal.js~Set",
+    "access": null,
+    "description": "",
+    "builtinExternal": true
+  },
+  {
+    "__docId__": 107,
+    "kind": "external",
+    "name": "WeakMap",
+    "externalLink": "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/WeakMap",
+    "memberof": "BuiltinExternal/ECMAScriptExternal.js",
+    "static": true,
+    "longname": "BuiltinExternal/ECMAScriptExternal.js~WeakMap",
+    "access": null,
+    "description": "",
+    "builtinExternal": true
+  },
+  {
+    "__docId__": 108,
+    "kind": "external",
+    "name": "WeakSet",
+    "externalLink": "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/WeakSet",
+    "memberof": "BuiltinExternal/ECMAScriptExternal.js",
+    "static": true,
+    "longname": "BuiltinExternal/ECMAScriptExternal.js~WeakSet",
+    "access": null,
+    "description": "",
+    "builtinExternal": true
+  },
+  {
+    "__docId__": 109,
+    "kind": "external",
+    "name": "ArrayBuffer",
+    "externalLink": "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/ArrayBuffer",
+    "memberof": "BuiltinExternal/ECMAScriptExternal.js",
+    "static": true,
+    "longname": "BuiltinExternal/ECMAScriptExternal.js~ArrayBuffer",
+    "access": null,
+    "description": "",
+    "builtinExternal": true
+  },
+  {
+    "__docId__": 110,
+    "kind": "external",
+    "name": "DataView",
+    "externalLink": "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/DataView",
+    "memberof": "BuiltinExternal/ECMAScriptExternal.js",
+    "static": true,
+    "longname": "BuiltinExternal/ECMAScriptExternal.js~DataView",
+    "access": null,
+    "description": "",
+    "builtinExternal": true
+  },
+  {
+    "__docId__": 111,
+    "kind": "external",
+    "name": "JSON",
+    "externalLink": "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/JSON",
+    "memberof": "BuiltinExternal/ECMAScriptExternal.js",
+    "static": true,
+    "longname": "BuiltinExternal/ECMAScriptExternal.js~JSON",
+    "access": null,
+    "description": "",
+    "builtinExternal": true
+  },
+  {
+    "__docId__": 112,
+    "kind": "external",
+    "name": "Promise",
+    "externalLink": "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Promise",
+    "memberof": "BuiltinExternal/ECMAScriptExternal.js",
+    "static": true,
+    "longname": "BuiltinExternal/ECMAScriptExternal.js~Promise",
+    "access": null,
+    "description": "",
+    "builtinExternal": true
+  },
+  {
+    "__docId__": 113,
+    "kind": "external",
+    "name": "Generator",
+    "externalLink": "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Generator",
+    "memberof": "BuiltinExternal/ECMAScriptExternal.js",
+    "static": true,
+    "longname": "BuiltinExternal/ECMAScriptExternal.js~Generator",
+    "access": null,
+    "description": "",
+    "builtinExternal": true
+  },
+  {
+    "__docId__": 114,
+    "kind": "external",
+    "name": "GeneratorFunction",
+    "externalLink": "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/GeneratorFunction",
+    "memberof": "BuiltinExternal/ECMAScriptExternal.js",
+    "static": true,
+    "longname": "BuiltinExternal/ECMAScriptExternal.js~GeneratorFunction",
+    "access": null,
+    "description": "",
+    "builtinExternal": true
+  },
+  {
+    "__docId__": 115,
+    "kind": "external",
+    "name": "Reflect",
+    "externalLink": "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Reflect",
+    "memberof": "BuiltinExternal/ECMAScriptExternal.js",
+    "static": true,
+    "longname": "BuiltinExternal/ECMAScriptExternal.js~Reflect",
+    "access": null,
+    "description": "",
+    "builtinExternal": true
+  },
+  {
+    "__docId__": 116,
+    "kind": "external",
+    "name": "Proxy",
+    "externalLink": "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Proxy",
+    "memberof": "BuiltinExternal/ECMAScriptExternal.js",
+    "static": true,
+    "longname": "BuiltinExternal/ECMAScriptExternal.js~Proxy",
+    "access": null,
+    "description": "",
+    "lineNumber": 193,
+    "builtinExternal": true
+  },
+  {
+    "__docId__": 118,
+    "kind": "external",
+    "name": "CanvasRenderingContext2D",
+    "externalLink": "https://developer.mozilla.org/en-US/docs/Web/API/CanvasRenderingContext2D",
+    "memberof": "BuiltinExternal/WebAPIExternal.js",
+    "static": true,
+    "longname": "BuiltinExternal/WebAPIExternal.js~CanvasRenderingContext2D",
+    "access": null,
+    "description": "",
+    "builtinExternal": true
+  },
+  {
+    "__docId__": 119,
+    "kind": "external",
+    "name": "DocumentFragment",
+    "externalLink": "https://developer.mozilla.org/en-US/docs/Web/API/DocumentFragment",
+    "memberof": "BuiltinExternal/WebAPIExternal.js",
+    "static": true,
+    "longname": "BuiltinExternal/WebAPIExternal.js~DocumentFragment",
+    "access": null,
+    "description": "",
+    "builtinExternal": true
+  },
+  {
+    "__docId__": 120,
+    "kind": "external",
+    "name": "Element",
+    "externalLink": "https://developer.mozilla.org/en-US/docs/Web/API/Element",
+    "memberof": "BuiltinExternal/WebAPIExternal.js",
+    "static": true,
+    "longname": "BuiltinExternal/WebAPIExternal.js~Element",
+    "access": null,
+    "description": "",
+    "builtinExternal": true
+  },
+  {
+    "__docId__": 121,
+    "kind": "external",
+    "name": "Event",
+    "externalLink": "https://developer.mozilla.org/en-US/docs/Web/API/Event",
+    "memberof": "BuiltinExternal/WebAPIExternal.js",
+    "static": true,
+    "longname": "BuiltinExternal/WebAPIExternal.js~Event",
+    "access": null,
+    "description": "",
+    "builtinExternal": true
+  },
+  {
+    "__docId__": 122,
+    "kind": "external",
+    "name": "Node",
+    "externalLink": "https://developer.mozilla.org/en-US/docs/Web/API/Node",
+    "memberof": "BuiltinExternal/WebAPIExternal.js",
+    "static": true,
+    "longname": "BuiltinExternal/WebAPIExternal.js~Node",
+    "access": null,
+    "description": "",
+    "builtinExternal": true
+  },
+  {
+    "__docId__": 123,
+    "kind": "external",
+    "name": "NodeList",
+    "externalLink": "https://developer.mozilla.org/en-US/docs/Web/API/NodeList",
+    "memberof": "BuiltinExternal/WebAPIExternal.js",
+    "static": true,
+    "longname": "BuiltinExternal/WebAPIExternal.js~NodeList",
+    "access": null,
+    "description": "",
+    "builtinExternal": true
+  },
+  {
+    "__docId__": 124,
+    "kind": "external",
+    "name": "XMLHttpRequest",
+    "externalLink": "https://developer.mozilla.org/en/docs/Web/API/XMLHttpRequest",
+    "memberof": "BuiltinExternal/WebAPIExternal.js",
+    "static": true,
+    "longname": "BuiltinExternal/WebAPIExternal.js~XMLHttpRequest",
+    "access": null,
+    "description": "",
+    "builtinExternal": true
+  },
+  {
+    "__docId__": 125,
+    "kind": "external",
+    "name": "AudioContext",
+    "externalLink": "https://developer.mozilla.org/en/docs/Web/API/AudioContext",
+    "memberof": "BuiltinExternal/WebAPIExternal.js",
+    "static": true,
+    "longname": "BuiltinExternal/WebAPIExternal.js~AudioContext",
+    "access": null,
+    "description": "",
+    "lineNumber": 34,
+    "builtinExternal": true
+  }
+]

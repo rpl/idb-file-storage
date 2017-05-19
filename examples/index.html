@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html id="examples-index-page">
+  <head>
+    <meta charset="utf-8">
+    <script src="../dist/idb-file-storage.js"></script>
+    <script src="examples.js"></script>
+    <link rel="stylesheet" href="examples.css">
+  </head>
+  <body>
+    <div id="examples-list">
+      <h3>idb-file-storage examples</h3>
+      <ul>
+        <li><a href="#" id="ex-store-blobs">Store Blob objects</a></li>
+        <li><a href="#" id="ex-store-files">Store File objects</a></li>
+        <li><a href="#" id="ex-list-stored">List and count stored data</a></li>
+        <li><a href="#" id="ex-get-stored">Get stored data</a></li>
+        <li><a href="#" id="ex-mutable-files">Mutable Files (non-standard / Firefox only)</a></li>
+      </ul>
+      <button id="clear-logs">Clear logs</button>
+      <button id="list-all-files">List all files</button>
+      <button id="clear-all-files">Clear all files</button>
+      <p>
+        This HTML contains a small collection of usage examples for the <em>idb-file-storage</em>
+        library.
+      </p>
+      <p>
+        Run an example by selecting it from the list.
+      </p>
+    </div>
+    <div id="example-content">
+      <iframe id="example-iframe"
+              src="data:text/html,<em>Run an example by selecting it from the list</em>">
+      </iframe>
+    </div>
+    <div id="logs-area">
+      <h3>example logs</h3>
+      <pre id="logs">This is the area where the examples are going to append <br> their logs.</pre>
+    </div>
+  </body>
+</html>
