@@ -18,13 +18,16 @@ This library should allow WebExtensions add-ons to be able to store and manipula
 The Promise based [IDBMutableFile][IDBMutableFile] API is currently not available when this library runs on Chrome (e.g. as a Chrome extension), but it still works for storing and retrieving Blob and File instances.
 Even if not yet implemented, providing a polyfill for the [IDBMutableFile][IDBMutableFile] API on Chrome based on Blob instances is technically possible.
 
+A more detailed **API reference** (generated using esdoc from the inline comments),
+and a collection of small examples are available at the following urls:
+
+* API Reference: https://doc.esdoc.org/github.com/rpl/idb-file-storage/
+* Examples:
+  - Live Demo: https://rpl.github.io/idb-file-storage/examples/
+  - Source: https://github.com/rpl/idb-file-storage/tree/master/examples/
+
 How to use it
 -------------
-
-A more detailed **API reference** is generated using esdoc from the inline comments,
-and it is available at the following url:
-
-- https://doc.esdoc.org/github.com/rpl/idb-file-storage/
 
 The library is wrapped as an UMD module, and so it can be included as a CommonJS
 module using a CommonJS module loader (e.g. webpack, browserify, rollup, ...) or
